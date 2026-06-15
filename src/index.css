@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ij-50 text-slate-900 antialiased dark:bg-ij-950 dark:text-slate-100;
+  margin: 0;
+  /* Respect notches / home indicators on phones. */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+@layer components {
+  .card {
+    @apply rounded-3xl border border-white/60 bg-white/80 shadow-xl shadow-slate-900/5 backdrop-blur
+      dark:border-white/5 dark:bg-white/[0.04] dark:shadow-black/30;
+  }
+
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+
+  /* Tabular numbers keep the ticking countdown from jittering. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+}
+
+/* The animated "water" backdrop behind the hero. */
+.water-bg {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(0, 157, 224, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 90% 0%, rgba(226, 35, 26, 0.1), transparent 55%);
+}
