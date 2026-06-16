@@ -26,7 +26,6 @@ export default function App() {
   const nowSecondOfWeek = useMemo(() => amsterdamMoment(now).secondOfWeek, [now])
 
   const { userId } = useAnonSession()
-  console.log('anon userId:', userId)
 
   const [flipped, setFlipped] = useState<Record<LineId, boolean>>({ F4: false, F7: false })
   const swap = (line: LineId) => setFlipped((f) => ({ ...f, [line]: !f[line] }))
