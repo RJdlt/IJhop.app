@@ -5,8 +5,8 @@ import { GAMES, getGame } from './registry'
 import { attachInput } from './input'
 import type { InputHandle } from './input'
 import { getHighScore, recordScore } from './scoreStore'
-import { submitScore, topScores } from './leaderboard'
-import type { ScoreRow } from './leaderboard'
+import { submitScore } from './leaderboard'
+import { Leaderboard } from './Leaderboard'
 import { getNickname, setNickname, NICK_MAX } from '../lib/nickname'
 import type { GameInitOpts, GameModule, GameOverLine } from './types'
 
@@ -62,10 +62,8 @@ export function ArcadeShell({
   const [nick, setNick] = useState(() => getNickname())
   const nickRef = useRef(nick)
   nickRef.current = nick
-  const [board, setBoard] = useState<ScoreRow[]>([])
-  const refreshBoard = useCallback(() => {
-    topScores(BOARD_GAME, 10).then(setBoard)
-  }, [])
+  // Bump om de ranglijst direct te verversen nadat onze eigen score binnen is.
+  const [boardReload, setBoardReload] = useState(0)
   const saveNick = () => {
     const clean = setNickname(nick)
     if (clean) setNick(clean)
@@ -151,8 +149,10 @@ export function ArcadeShell({
           detachInput()
           setResult({ score: s, high, isRecord, lines: lines ?? [] })
           setScreen('over')
-          // Score de online ranglijst in sturen en de lijst verversen.
-          submitScore(id, nickRef.current.trim() || getNickname(), s).then(refreshBoard)
+          // Score de online ranglijst in sturen en de lijst direct verversen.
+          submitScore(id, nickRef.current.trim() || getNickname(), s).then(() =>
+            setBoardReload((k) => k + 1),
+          )
         },
       }
       optsRef.current = opts
@@ -201,11 +201,6 @@ export function ArcadeShell({
   // Ruim alles netjes op bij unmount (geen lekken bij herstart).
   useEffect(() => () => teardownGame(), [teardownGame])
 
-  // Ververs de ranglijst zodra we het menu of het game-over-scherm tonen.
-  useEffect(() => {
-    if (screen === 'menu' || screen === 'over') refreshBoard()
-  }, [screen, refreshBoard])
-
   const toggleMute = () =>
     setMuted((m) => {
       const next = !m
@@ -238,27 +233,7 @@ export function ArcadeShell({
   )
 
   const leaderboard = (
-    <div className="w-full max-w-xs text-left">
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
-        🏆 {t.arcade.leaderboard}
-      </p>
-      {board.length === 0 ? (
-        <p className="text-xs text-white/50">{t.arcade.noScoresYet}</p>
-      ) : (
-        <ol className="flex flex-col gap-1">
-          {board.map((r, i) => (
-            <li
-              key={`${r.name}-${i}`}
-              className="flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5 text-sm"
-            >
-              <span className="w-5 shrink-0 tabular-nums text-white/50">{i + 1}</span>
-              <span className="flex-1 truncate">{r.name}</span>
-              <span className="font-semibold tabular-nums">{r.score}</span>
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
+    <Leaderboard gameId={BOARD_GAME} youName={nick.trim()} reloadKey={boardReload} />
   )
 
   return (

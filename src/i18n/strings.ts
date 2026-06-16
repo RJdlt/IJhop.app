@@ -73,6 +73,9 @@ export interface Strings {
     save: string
     leaderboard: string
     noScoresYet: string
+    thisWeek: string
+    allTime: string
+    you: string
     shopTitle: string
     playerLevel: string
     choose: string
@@ -166,6 +169,9 @@ export const STRINGS: Record<Lang, Strings> = {
       save: 'Opslaan',
       leaderboard: 'Toplijst',
       noScoresYet: 'Nog geen scores — speel de eerste!',
+      thisWeek: 'Deze week',
+      allTime: 'Aller-tijden',
+      you: 'Jij',
       shopTitle: 'Poppetjes',
       playerLevel: 'Niveau',
       choose: 'Kies',
@@ -257,6 +263,9 @@ export const STRINGS: Record<Lang, Strings> = {
       save: 'Save',
       leaderboard: 'Leaderboard',
       noScoresYet: 'No scores yet — be the first!',
+      thisWeek: 'This week',
+      allTime: 'All-time',
+      you: 'You',
       shopTitle: 'Characters',
       playerLevel: 'Level',
       choose: 'Select',

@@ -6,7 +6,9 @@ import type { Skin } from './render'
 import { Sfx } from './audio'
 import {
   applyRunResult,
+  CHARACTERS,
   characterById,
+  isUnlocked,
   loadProfile,
   runLevel,
   runReward,
@@ -52,12 +54,16 @@ export function createPontHop(): GameModule {
       // Bonus-stroopwafels (verzamelde munten + afstand) in de spaarpot.
       const run = { crossings: world.crossings, coins: world.coins }
       const reward = runReward(run)
-      const profile = applyRunResult(loadProfile(), run)
+      const before = loadProfile()
+      const profile = applyRunResult(before, run)
       saveProfile(profile)
+      // Mijlpaal-poppetjes die door deze run zijn vrijgespeeld.
+      const unlocked = CHARACTERS.filter((c) => !isUnlocked(before, c) && isUnlocked(profile, c))
       opts.onGameOver(world.score, [
         { label: 'Level', value: String(runLevel(world.crossings)) },
         { label: 'Bonus 🧇', value: `+${reward}` },
         { label: 'Totaal 🧇', value: String(profile.wallet) },
+        ...unlocked.map((c) => ({ label: '🎉 Vrijgespeeld', value: `${c.emoji} ${c.name.nl}` })),
       ])
       return
     }
