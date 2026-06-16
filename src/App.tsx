@@ -4,6 +4,7 @@ import { RouteCard } from './components/RouteCard'
 import { CatchPanel } from './components/CatchPanel'
 import { Footer } from './components/Footer'
 import { useNow } from './hooks/useNow'
+import { useAnonSession } from './hooks/useAnonSession'
 import { amsterdamMoment } from './lib/time'
 import type { StopPair } from './lib/schedule'
 import type { LineId } from './types'
@@ -23,6 +24,9 @@ const DIRECTIONS: Record<LineId, [StopPair, StopPair]> = {
 export default function App() {
   const now = useNow(1000)
   const nowSecondOfWeek = useMemo(() => amsterdamMoment(now).secondOfWeek, [now])
+
+  const { userId } = useAnonSession()
+  console.log('anon userId:', userId)
 
   const [flipped, setFlipped] = useState<Record<LineId, boolean>>({ F4: false, F7: false })
   const swap = (line: LineId) => setFlipped((f) => ({ ...f, [line]: !f[line] }))
