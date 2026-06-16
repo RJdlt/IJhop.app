@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react'
 import type { Lang } from '../i18n/strings'
 
 /**
@@ -13,6 +14,12 @@ export type InputAction = 'up' | 'down' | 'left' | 'right' | 'tap'
 
 export type GameState = 'idle' | 'running' | 'paused' | 'over'
 
+/** Extra regel die een spel op het game-over-scherm kan tonen (bijv. beloning). */
+export interface GameOverLine {
+  label: string
+  value: string
+}
+
 /** Alles wat een spel bij `init` meekrijgt: tekenvlak-maten (in CSS-pixels) en
  *  de twee callbacks waarmee het naar de shell terugpraat. */
 export interface GameInitOpts {
@@ -24,8 +31,8 @@ export interface GameInitOpts {
   dpr: number
   /** Roep aan zodra de score wijzigt. */
   onScoreChange: (score: number) => void
-  /** Roep aan bij game-over met de eindscore. */
-  onGameOver: (score: number) => void
+  /** Roep aan bij game-over met de eindscore en optioneel extra regels. */
+  onGameOver: (score: number, lines?: GameOverLine[]) => void
 }
 
 export interface GameModule {
@@ -54,4 +61,7 @@ export interface GameMeta {
   tagline: Record<Lang, string>
   /** Fabriek: levert telkens een verse, geïsoleerde spelinstantie. */
   create: () => GameModule
+  /** Optioneel React-paneel op het menu (bijv. een shop/poppetjes-keuze).
+   *  Houdt de shell generiek: spellen leveren hun eigen menu-UI. */
+  MenuPanel?: ComponentType
 }

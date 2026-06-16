@@ -76,8 +76,9 @@ const CULL_BEHIND = 4
 const GEN_AHEAD = 16
 export const CROSS_BASE = 10
 export const COIN_VALUE = 3
-const IDLE_NUDGE = 16 // px/s waarmee de camera oprukt als je beweegt
-const IDLE_GRACE = 2.5 // s stilstand voordat de nudge inzet
+const IDLE_NUDGE = 11 // px/s waarmee de camera oprukt als je beweegt (mild)
+const IDLE_GRACE = 4 // s stilstand voordat de nudge inzet
+const HIT_FORGIVE = 5 // kleinere hitbox: net-misser met een boot telt niet als raak
 const CAMERA_LERP = 7
 const PLAYER_ANCHOR = 0.38 // speler zit 38% van onderaf in beeld
 
@@ -98,10 +99,11 @@ const mod = (n: number, m: number) => ((n % m) + m) % m
 const randRange = (rng: () => number, lo: number, hi: number) => lo + rng() * (hi - lo)
 
 function segDanger(crossings: number): number {
-  return Math.min(3 + Math.floor(crossings / 2), 8)
+  // Begin rustig: korte segmenten met veel veilige steigers, langzaam zwaarder.
+  return Math.min(2 + Math.floor(crossings / 3), 6)
 }
 export function speedFactor(crossings: number): number {
-  return Math.min(1 + crossings * 0.07, 2.4)
+  return Math.min(1 + crossings * 0.05, 2.0)
 }
 
 // ---- Baangeneratie ---------------------------------------------------------
@@ -125,16 +127,16 @@ function makeLane(
   let gap: number
   if (kind === 'road') {
     objW = randRange(rng, 64, 92)
-    speed = randRange(rng, 90, 140) * factor
-    gap = objW + randRange(rng, 150, 240) / Math.sqrt(factor)
+    speed = randRange(rng, 58, 92) * factor
+    gap = objW + randRange(rng, 200, 320) / Math.sqrt(factor)
   } else if (kind === 'water-ferry') {
-    objW = randRange(rng, 116, 150)
-    speed = randRange(rng, 48, 86) * factor
-    gap = objW + randRange(rng, 70, 120)
+    objW = randRange(rng, 130, 175)
+    speed = randRange(rng, 36, 64) * factor
+    gap = objW + randRange(rng, 55, 95)
   } else {
-    objW = randRange(rng, 58, 82)
-    speed = randRange(rng, 95, 150) * factor
-    gap = objW + randRange(rng, 54, 110)
+    objW = randRange(rng, 70, 96)
+    speed = randRange(rng, 64, 104) * factor
+    gap = objW + randRange(rng, 48, 92)
   }
   const count = Math.ceil((width + objW) / gap) + 1
   const L = count * gap
@@ -252,8 +254,9 @@ export function platformUnder(lane: Lane, t: number, px: number): number | null 
 }
 
 function boatHits(lane: Lane, t: number, px: number): boolean {
+  const r = PLAYER_HALF - HIT_FORGIVE
   for (const left of laneObjectLefts(lane, t)) {
-    if (px + PLAYER_HALF > left && px - PLAYER_HALF < left + lane.width) return true
+    if (px + r > left && px - r < left + lane.width) return true
   }
   return false
 }

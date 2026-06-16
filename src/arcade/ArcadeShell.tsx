@@ -18,6 +18,8 @@ interface ArcadeShellProps {
   onClose?: () => void
   /** Extra inhoud op het menu (bijv. de pont-keuze). Houdt de shell generiek. */
   menuExtra?: ReactNode
+  /** Niet-blokkerend balkje bovenin tijdens het spelen (bijv. pont-aftelklok). */
+  banner?: ReactNode
   /** Toont in de pauze-sluier een knop om de pauze te negeren. */
   onDismissPause?: () => void
   dismissLabel?: string
@@ -31,6 +33,7 @@ export function ArcadeShell({
   pauseReason,
   onClose,
   menuExtra,
+  banner,
   onDismissPause,
   dismissLabel,
 }: ArcadeShellProps) {
@@ -220,6 +223,13 @@ export function ArcadeShell({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Niet-blokkerend balkje (pont-aftelklok) tijdens het spelen */}
+      {screen === 'playing' && banner && (
+        <div className="pointer-events-none absolute inset-x-0 top-12 flex justify-center px-3">
+          {banner}
         </div>
       )}
 

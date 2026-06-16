@@ -13,6 +13,7 @@ import { useAnonSession } from './hooks/useAnonSession'
 import { useHashView } from './hooks/useHashView'
 import { useI18n } from './i18n/i18n'
 import { amsterdamMoment } from './lib/time'
+import { clockCountdown } from './lib/format'
 import { CONNECTIONS, nextDepartures } from './lib/schedule'
 import type { StopPair } from './lib/schedule'
 import type { LineId } from './types'
@@ -29,8 +30,10 @@ const DIRECTIONS: Record<LineId, [StopPair, StopPair]> = {
   ],
 }
 
-// Onder deze grens pauzeert de arcade: eerst je echte pont halen.
-const NEAR_DEPARTURE_SECONDS = 60
+// Onder deze grens toont het spel een opvallender (maar niet-blokkerend) tikje.
+const SOON_SECONDS = 60
+// Boven deze grens is het aftelbalkje nog niet relevant.
+const BANNER_SECONDS = 300
 const WATCH_KEY = 'ijhop.arcade.watch'
 
 const connKey = (c: StopPair) => `${c.line}:${c.from}:${c.to}`
@@ -74,13 +77,21 @@ export default function App() {
     [nowSecondOfWeek],
   )
 
-  // Alleen de gekozen pont pauzeert het spel.
+  // De gekozen pont onderbreekt het spel niet meer: enkel een rustig
+  // aftelbalkje bovenin, dat opvalt als de pont bijna gaat.
   const watched = watchKey ? ferryOptions.find((o) => o.key === watchKey) ?? null : null
-  const nearDeparture =
-    watched?.secondsUntil != null && watched.secondsUntil < NEAR_DEPARTURE_SECONDS
-  const pauseReason = watched
-    ? `${watched.line} → ${t.stopNames[watched.to]} ${t.arcade.ferryLeaves}`
-    : undefined
+  const watchedSecs = watched?.secondsUntil
+  const ferryBanner =
+    watched && watchedSecs != null && watchedSecs < BANNER_SECONDS ? (
+      <span
+        className={`pointer-events-none rounded-full px-3 py-1 text-xs font-semibold tabular-nums shadow-lg backdrop-blur ${
+          watchedSecs < SOON_SECONDS ? 'bg-amber-400 text-amber-950' : 'bg-black/40 text-white'
+        }`}
+      >
+        🚤 {watched.line} → {t.stopNames[watched.to]} · {clockCountdown(watchedSecs)}
+        {watchedSecs < SOON_SECONDS ? ` — ${t.arcade.ferryLeaves}` : ''}
+      </span>
+    ) : null
 
   const ferryPicker = (
     <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
@@ -114,12 +125,7 @@ export default function App() {
             {/* Concrete dvh-hoogte i.p.v. een height:100%-keten, die iOS Safari
                 niet betrouwbaar doorrekent — zo wordt het speelveld groot. */}
             <div className="h-[78dvh] min-h-[420px] w-full">
-              <ArcadeShell
-                paused={nearDeparture}
-                pauseReason={pauseReason}
-                menuExtra={ferryPicker}
-                onDismissPause={() => chooseWatch(null)}
-              />
+              <ArcadeShell menuExtra={ferryPicker} banner={ferryBanner} />
             </div>
           </main>
         )}
@@ -145,10 +151,9 @@ export default function App() {
         >
           <div className="mx-auto h-full max-w-md pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
             <ArcadeShell
-              paused={!arcadeOpen || nearDeparture}
-              pauseReason={pauseReason}
+              paused={!arcadeOpen}
               menuExtra={ferryPicker}
-              onDismissPause={() => chooseWatch(null)}
+              banner={ferryBanner}
               onClose={() => setArcadeOpen(false)}
             />
           </div>
