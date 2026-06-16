@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useI18n } from '../i18n/i18n'
 import { subscribeScores, topScores, type Board, type Period } from './leaderboard'
 
@@ -8,23 +9,28 @@ interface LeaderboardProps {
   youName?: string
   /** Bump deze waarde om een directe verversing af te dwingen (na een potje). */
   reloadKey?: number
+  /** Beperk tot één overtocht-kamer (verbergt de periode-tabs). */
+  room?: string | null
+  /** Eigen kop (bijv. "Deze overtocht · F7 → NDSM"). */
+  title?: ReactNode
 }
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-export function Leaderboard({ gameId, youName, reloadKey }: LeaderboardProps) {
+export function Leaderboard({ gameId, youName, reloadKey, room, title }: LeaderboardProps) {
   const { t } = useI18n()
   const [period, setPeriod] = useState<Period>('all')
   const [board, setBoard] = useState<Board>({ rows: [] })
   const loadId = useRef(0)
+  const scoped = room != null
 
   const load = useCallback(async () => {
     const id = ++loadId.current
-    const next = await topScores(gameId, period, 10)
+    const next = await topScores(gameId, scoped ? 'all' : period, 10, room)
     if (id === loadId.current) setBoard(next) // negeer verlate antwoorden
-  }, [gameId, period])
+  }, [gameId, period, room, scoped])
 
-  // Laden bij periodewissel en na een afgerond potje.
+  // Laden bij periode-/kamerwissel en na een afgerond potje.
   useEffect(() => {
     load()
   }, [load, reloadKey])
@@ -36,24 +42,26 @@ export function Leaderboard({ gameId, youName, reloadKey }: LeaderboardProps) {
 
   return (
     <div className="w-full max-w-xs text-left">
-      <div className="mb-1.5 flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wide text-white/60">
-          🏆 {t.arcade.leaderboard}
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="truncate text-xs font-semibold uppercase tracking-wide text-white/60">
+          {title ?? `🏆 ${t.arcade.leaderboard}`}
         </p>
-        <div className="flex gap-1 rounded-full bg-white/10 p-0.5 text-[11px]">
-          {(['week', 'all'] as Period[]).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriod(p)}
-              className={`rounded-full px-2 py-0.5 font-medium transition ${
-                period === p ? 'bg-white text-brand-dark' : 'text-white/70'
-              }`}
-            >
-              {p === 'week' ? t.arcade.thisWeek : t.arcade.allTime}
-            </button>
-          ))}
-        </div>
+        {!scoped && (
+          <div className="flex shrink-0 gap-1 rounded-full bg-white/10 p-0.5 text-[11px]">
+            {(['week', 'all'] as Period[]).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPeriod(p)}
+                className={`rounded-full px-2 py-0.5 font-medium transition ${
+                  period === p ? 'bg-white text-brand-dark' : 'text-white/70'
+                }`}
+              >
+                {p === 'week' ? t.arcade.thisWeek : t.arcade.allTime}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {board.rows.length === 0 ? (

@@ -26,6 +26,10 @@ interface ArcadeShellProps {
   menuExtra?: ReactNode
   /** Niet-blokkerend balkje bovenin tijdens het spelen (bijv. pont-aftelklok). */
   banner?: ReactNode
+  /** Kamer van de gekozen overtocht; scores tellen dan ook in die lijst. */
+  crossingRoom?: string | null
+  /** Korte omschrijving van de overtocht voor de kop (bijv. "F7 → NDSM"). */
+  crossingLabel?: string
   /** Toont in de pauze-sluier een knop om de pauze te negeren. */
   onDismissPause?: () => void
   dismissLabel?: string
@@ -40,6 +44,8 @@ export function ArcadeShell({
   onClose,
   menuExtra,
   banner,
+  crossingRoom,
+  crossingLabel,
   onDismissPause,
   dismissLabel,
 }: ArcadeShellProps) {
@@ -62,6 +68,9 @@ export function ArcadeShell({
   const [nick, setNick] = useState(() => getNickname())
   const nickRef = useRef(nick)
   nickRef.current = nick
+  // Laatste overtocht-kamer bij de hand voor het moment van game-over.
+  const crossingRef = useRef(crossingRoom)
+  crossingRef.current = crossingRoom
   // Bump om de ranglijst direct te verversen nadat onze eigen score binnen is.
   const [boardReload, setBoardReload] = useState(0)
   const saveNick = () => {
@@ -149,9 +158,9 @@ export function ArcadeShell({
           detachInput()
           setResult({ score: s, high, isRecord, lines: lines ?? [] })
           setScreen('over')
-          // Score de online ranglijst in sturen en de lijst direct verversen.
-          submitScore(id, nickRef.current.trim() || getNickname(), s).then(() =>
-            setBoardReload((k) => k + 1),
+          // Score insturen (ook getagd met de overtocht) en lijsten verversen.
+          submitScore(id, nickRef.current.trim() || getNickname(), s, crossingRef.current).then(
+            () => setBoardReload((k) => k + 1),
           )
         },
       }
@@ -236,6 +245,16 @@ export function ArcadeShell({
     <Leaderboard gameId={BOARD_GAME} youName={nick.trim()} reloadKey={boardReload} />
   )
 
+  const crossingBoard = crossingRoom ? (
+    <Leaderboard
+      gameId={BOARD_GAME}
+      youName={nick.trim()}
+      reloadKey={boardReload}
+      room={crossingRoom}
+      title={`🚤 ${t.arcade.thisCrossing}${crossingLabel ? ` · ${crossingLabel}` : ''}`}
+    />
+  ) : null
+
   return (
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden rounded-3xl bg-brand-dark">
       <canvas ref={canvasRef} className="block h-full w-full touch-none" />
@@ -305,6 +324,7 @@ export function ArcadeShell({
             ))}
           </div>
           {GAMES.map((g) => (g.MenuPanel ? <g.MenuPanel key={g.id} /> : null))}
+          {crossingBoard}
           {leaderboard}
           {onClose && (
             <button
@@ -358,6 +378,7 @@ export function ArcadeShell({
               ))}
             </div>
           )}
+          {crossingBoard}
           {leaderboard}
           <div className="flex w-full max-w-xs flex-col gap-2">
             <button

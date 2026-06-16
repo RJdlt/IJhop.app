@@ -75,6 +75,7 @@ export interface Strings {
     noScoresYet: string
     thisWeek: string
     allTime: string
+    thisCrossing: string
     you: string
     shopTitle: string
     playerLevel: string
@@ -171,6 +172,7 @@ export const STRINGS: Record<Lang, Strings> = {
       noScoresYet: 'Nog geen scores — speel de eerste!',
       thisWeek: 'Deze week',
       allTime: 'Aller-tijden',
+      thisCrossing: 'Deze overtocht',
       you: 'Jij',
       shopTitle: 'Poppetjes',
       playerLevel: 'Niveau',
@@ -265,6 +267,7 @@ export const STRINGS: Record<Lang, Strings> = {
       noScoresYet: 'No scores yet — be the first!',
       thisWeek: 'This week',
       allTime: 'All-time',
+      thisCrossing: 'This crossing',
       you: 'You',
       shopTitle: 'Characters',
       playerLevel: 'Level',

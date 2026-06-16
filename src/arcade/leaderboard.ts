@@ -43,18 +43,28 @@ async function ensureSession(): Promise<string | null> {
   return data.user?.id ?? null
 }
 
-/** Stuurt een afgeronde score in. Stil falen mag: scores zijn niet kritiek. */
-export async function submitScore(gameId: string, name: string, score: number): Promise<void> {
+/** Stuurt een afgeronde score in. Met `room` telt 'ie ook in die overtocht-lijst
+ *  (de globale lijst filtert niet op room, dus één insert volstaat voor beide). */
+export async function submitScore(
+  gameId: string,
+  name: string,
+  score: number,
+  room?: string | null,
+): Promise<void> {
   const client = supabase
   if (!client || score <= 0) return
   try {
     const userId = await ensureSession()
-    await client.from(TABLE).insert({
+    const row: Record<string, unknown> = {
       game_id: gameId,
       name: sanitizeName(name),
       score: Math.floor(score),
       user_id: userId,
-    })
+    }
+    // `room` alleen meesturen als die er is — zo blijft insturen werken ook als
+    // migratie 0002 (de room-kolom) nog niet gedraaid is.
+    if (room) row.room = room
+    await client.from(TABLE).insert(row)
   } catch (e) {
     console.warn('Score insturen mislukt:', e)
   }
@@ -82,8 +92,14 @@ export function dedupeByPlayer(rows: ScoreRow[]): ScoreRow[] {
   return [...bestByUser.values(), ...loose].sort((a, b) => b.score - a.score)
 }
 
-/** Haalt de toplijst op (beste per speler) plus jouw eigen rang. */
-export async function topScores(gameId: string, period: Period = 'all', limit = 10): Promise<Board> {
+/** Haalt de toplijst op (beste per speler) plus jouw eigen rang.
+ *  Met `room` beperkt tot één overtocht; zonder room is het de globale lijst. */
+export async function topScores(
+  gameId: string,
+  period: Period = 'all',
+  limit = 10,
+  room?: string | null,
+): Promise<Board> {
   const client = supabase
   if (!client) return { rows: [] }
   try {
@@ -93,6 +109,7 @@ export async function topScores(gameId: string, period: Period = 'all', limit = 
       .eq('game_id', gameId)
       .order('score', { ascending: false })
       .limit(300)
+    if (room) query = query.eq('room', room)
     const since = periodSince(period)
     if (since) query = query.gte('created_at', since)
 

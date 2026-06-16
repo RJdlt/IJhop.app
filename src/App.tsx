@@ -94,6 +94,15 @@ export default function App() {
       </span>
     ) : null
 
+  // Kamer van de gekozen overtocht: lijn+richting + het vertrekmoment, zodat
+  // iedereen die dezelfde afvaart kiest in dezelfde overtocht-ranglijst valt.
+  // (Som blijft stabiel: nu loopt op, secondsUntil telt even hard af.)
+  const crossingRoom =
+    watched && watchedSecs != null
+      ? `${watched.key}@${Math.floor(nowSecondOfWeek + watchedSecs)}`
+      : null
+  const crossingLabel = watched ? `${watched.line} → ${t.stopNames[watched.to]}` : undefined
+
   const ferryPicker = (
     <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
   )
@@ -127,7 +136,12 @@ export default function App() {
             {/* Concrete dvh-hoogte i.p.v. een height:100%-keten, die iOS Safari
                 niet betrouwbaar doorrekent — zo wordt het speelveld groot. */}
             <div className="h-[78dvh] min-h-[420px] w-full">
-              <ArcadeShell menuExtra={ferryPicker} banner={ferryBanner} />
+              <ArcadeShell
+                menuExtra={ferryPicker}
+                banner={ferryBanner}
+                crossingRoom={crossingRoom}
+                crossingLabel={crossingLabel}
+              />
             </div>
           </main>
         )}
@@ -156,6 +170,8 @@ export default function App() {
               paused={!arcadeOpen}
               menuExtra={ferryPicker}
               banner={ferryBanner}
+              crossingRoom={crossingRoom}
+              crossingLabel={crossingLabel}
               onClose={() => setArcadeOpen(false)}
             />
           </div>
