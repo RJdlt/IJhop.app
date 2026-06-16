@@ -1,98 +1,69 @@
 import type { GameInitOpts, GameModule, GameState, InputAction } from '../../types'
+import { createWorld, resizeWorld, worldHop, worldStep } from './engine'
+import type { World } from './engine'
+import { render } from './render'
+import { Sfx } from './audio'
 
 /**
- * Pont Hop — Fase 1: bewuste placeholder. Tekent een welkomstframe met
- * Kapitein Pim en reageert zichtbaar op input, zodat de shell-koppeling
- * (input, score-callback, game-over) aantoonbaar werkt. De echte gameplay
- * (lanes, ponten, botsingen) komt in Fase 2+.
+ * Pont Hop — Kapitein Pim steekt het IJ over: hop van steiger naar steiger,
+ * drijf mee op de ponten (F4/F7), ontwijk watertaxi's en pak stroopwafels.
+ * De GameModule koppelt de pure engine aan canvas, RAF, input en audio.
  */
-
-const WATER = '#1D9E75' // brand-groen, jouw water-kleur
-const CAP = '#F08A24' // oranje pet van Kapitein Pim
-const STEP = 44
-
 export function createPontHop(): GameModule {
   let ctx: CanvasRenderingContext2D | null = null
   let opts: GameInitOpts | null = null
+  let world: World | null = null
   let state: GameState = 'idle'
   let raf = 0
+  let lastT = 0
+  let lastScore = 0
+  const sfx = new Sfx()
 
-  let score = 0
-  let x = 0
-  let y = 0
-  let lastAction: InputAction | null = null
-  let hops = 0
+  const frame = (now: number) => {
+    if (!world || !ctx || !opts || state !== 'running') return
+    const dt = lastT ? (now - lastT) / 1000 : 0
+    lastT = now
 
-  const loop = () => {
-    draw()
-    raf = requestAnimationFrame(loop)
+    const wasSafe = !world.over
+    worldStep(world, dt)
+
+    if (world.score !== lastScore) {
+      if (world.score > lastScore) sfx.coin()
+      lastScore = world.score
+      opts.onScoreChange(world.score)
+    }
+
+    render(ctx, world)
+
+    if (world.over && wasSafe) {
+      state = 'over'
+      sfx.splash()
+      cancelAnimationFrame(raf)
+      opts.onGameOver(world.score)
+      return
+    }
+    raf = requestAnimationFrame(frame)
   }
 
-  function draw() {
-    if (!ctx || !opts) return
-    const { width: w, height: h } = opts
-
-    // Water-achtergrond met een subtiele horizon.
-    ctx.fillStyle = WATER
-    ctx.fillRect(0, 0, w, h)
-    ctx.fillStyle = 'rgba(255,255,255,0.08)'
-    ctx.fillRect(0, 0, w, h * 0.34)
-
-    // Titel
-    ctx.textAlign = 'center'
-    ctx.fillStyle = 'rgba(255,255,255,0.95)'
-    ctx.font = '700 26px system-ui, sans-serif'
-    ctx.fillText('Pont Hop', w / 2, h * 0.16)
-    ctx.font = '500 14px system-ui, sans-serif'
-    ctx.fillStyle = 'rgba(255,255,255,0.8)'
-    ctx.fillText('Kapitein Pim — Fase 1 placeholder', w / 2, h * 0.16 + 24)
-    ctx.fillText('Swipe / pijltjes / tik', w / 2, h * 0.16 + 46)
-
-    // Kapitein Pim (placeholder: rond hoofd met oranje pet)
-    const r = 18
-    ctx.beginPath()
-    ctx.arc(x, y, r, 0, Math.PI * 2)
-    ctx.fillStyle = '#FFE0B8'
-    ctx.fill()
-    // pet
-    ctx.fillStyle = CAP
-    ctx.beginPath()
-    ctx.arc(x, y - 4, r, Math.PI, 0)
-    ctx.fill()
-    ctx.fillRect(x - r - 4, y - 4, (r + 4) * 2, 5)
-
-    // HUD onderin: laatste actie + hops
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'
-    ctx.font = '500 13px system-ui, sans-serif'
-    ctx.fillText(
-      `laatste: ${lastAction ?? '—'}   ·   hops: ${hops}`,
-      w / 2,
-      h - 18,
-    )
-  }
-
-  function reset() {
+  const begin = () => {
     if (!opts) return
-    score = 0
-    hops = 0
-    lastAction = null
-    x = opts.width / 2
-    y = opts.height * 0.68
+    world = createWorld({ width: opts.width, height: opts.height, seed: (Date.now() & 0xffffffff) >>> 0 })
+    lastScore = 0
+    lastT = 0
+    opts.onScoreChange(0)
+    state = 'running'
+    cancelAnimationFrame(raf)
+    raf = requestAnimationFrame(frame)
   }
 
   return {
     init(_canvas, context, o) {
       ctx = context
       opts = o
-      reset()
       state = 'idle'
     },
     start() {
-      reset()
-      state = 'running'
-      opts?.onScoreChange(0)
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(loop)
+      begin()
     },
     pause() {
       if (state !== 'running') return
@@ -102,8 +73,9 @@ export function createPontHop(): GameModule {
     resume() {
       if (state !== 'paused') return
       state = 'running'
+      lastT = 0
       cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(loop)
+      raf = requestAnimationFrame(frame)
     },
     stop() {
       state = 'idle'
@@ -111,49 +83,32 @@ export function createPontHop(): GameModule {
     },
     destroy() {
       cancelAnimationFrame(raf)
+      sfx.close()
       ctx = null
       opts = null
+      world = null
     },
-    onInput(action) {
-      if (state !== 'running' || !opts) return
-      lastAction = action
-      hops++
-      if (action === 'up' || action === 'tap') {
-        y -= STEP
-        score++
-        opts.onScoreChange(score)
-      } else if (action === 'down') {
-        y += STEP
-      } else if (action === 'left') {
-        x -= STEP
-      } else if (action === 'right') {
-        x += STEP
-      }
-
-      // Randen: zijwaarts botsen we tegen de rand; te ver naar onderen = "water"
-      // (placeholder voor de echte game-over-conditie van Fase 4).
-      x = Math.max(24, Math.min(opts.width - 24, x))
-      if (y < 24) y = 24
-      if (y > opts.height - 6) {
-        state = 'over'
-        cancelAnimationFrame(raf)
-        opts.onGameOver(score)
-      }
+    onInput(action: InputAction) {
+      if (state !== 'running' || !world) return
+      worldHop(world, action)
+      if (action !== 'down') sfx.hop()
     },
     getScore() {
-      return score
+      return world?.score ?? 0
     },
     getState() {
       return state
     },
-    resize(w, h, dpr) {
-      if (!opts) return
-      opts.width = w
-      opts.height = h
-      opts.dpr = dpr
-      // Houd Pim binnen het nieuwe veld.
-      x = Math.max(24, Math.min(w - 24, x))
-      y = Math.max(24, Math.min(h - 6, y))
+    resize(wpx, hpx, dpr) {
+      if (opts) {
+        opts.width = wpx
+        opts.height = hpx
+        opts.dpr = dpr
+      }
+      if (world) resizeWorld(world, wpx, hpx)
+    },
+    setMuted(muted: boolean) {
+      sfx.setMuted(muted)
     },
   }
 }

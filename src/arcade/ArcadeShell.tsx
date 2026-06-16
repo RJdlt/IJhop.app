@@ -35,7 +35,8 @@ export function ArcadeShell({ paused = false, pauseReason, onClose }: ArcadeShel
     null,
   )
   const [muted, setMuted] = useState(
-    () => typeof window !== 'undefined' && window.localStorage.getItem(MUTE_KEY) === '1',
+    // Geluid staat standaard uit; alleen 'aan' als de speler dat ooit koos.
+    () => typeof window === 'undefined' || window.localStorage.getItem(MUTE_KEY) !== '0',
   )
 
   /** Zet het canvas op de huidige containermaat met DPR-scaling. */
@@ -109,13 +110,14 @@ export function ArcadeShell({ paused = false, pauseReason, onClose }: ArcadeShel
       const mod = meta.create()
       moduleRef.current = mod
       mod.init(canvas, sized.ctx, opts)
+      mod.setMuted?.(muted)
       setScore(0)
       setResult(null)
       mod.start()
       attachInputNow()
       setScreen('playing')
     },
-    [teardownGame, sizeCanvas, detachInput, attachInputNow],
+    [teardownGame, sizeCanvas, detachInput, attachInputNow, muted],
   )
 
   const backToMenu = useCallback(() => {
@@ -157,6 +159,7 @@ export function ArcadeShell({ paused = false, pauseReason, onClose }: ArcadeShel
       } catch {
         /* faal stil */
       }
+      moduleRef.current?.setMuted?.(next)
       return next
     })
 

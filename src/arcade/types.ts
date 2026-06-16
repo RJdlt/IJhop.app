@@ -42,6 +42,8 @@ export interface GameModule {
   getState(): GameState
   /** Het tekenvlak is van maat veranderd (rotatie, resize). Maten in CSS-pixels. */
   resize(width: number, height: number, dpr: number): void
+  /** Optioneel: reageer op de mute-toggle van de shell (geluid aan/uit). */
+  setMuted?(muted: boolean): void
 }
 
 /** Registratie-metadata per spel — voedt het menu en (later) een leaderboard. */

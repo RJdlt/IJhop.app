@@ -29,6 +29,23 @@ je telefoon in een andere tijdzone staat).
 - 📲 **Installeerbare PWA** die volledig **offline** werkt — de hele
   dienstregeling zit in de app, dus geen bereik nodig aan de waterkant.
 
+## IJhop Arcade — Pont Hop 🛥️
+
+Een Crossy-Road-achtige mini-game om te spelen terwijl je op de pont wacht.
+Kapitein Pim hopt het IJ over: van steiger naar steiger, meedrijvend op de
+ponten (F4/F7), watertaxi's ontwijkend en stroopwafels verzamelend. Te openen
+via de **🕹️-snack** op het countdown-scherm of de **Spelletjes**-tab.
+
+De game pauzeert automatisch als je echte pont binnen 60 s vertrekt — wachttijd
+gaat voor. Hij is opgezet als kleine game-shell (`src/arcade/`) met een
+`GameModule`-interface, zodat een volgend spel toevoegen neerkomt op één nieuw
+bestand + één regel in `registry.ts`. De spel-logica zit in een pure, geteste
+engine (`engine.ts`, draait los van canvas):
+
+```bash
+npm test        # Vitest: gameplay-regels (botsingen, meedrijven, score, idle)
+```
+
 ## Data
 
 De dienstregeling komt uit de **officiële GVB GTFS-feed** (via
