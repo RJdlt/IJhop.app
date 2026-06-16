@@ -364,7 +364,8 @@ export function ArcadeShell({
       {screen === 'over' && result && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-brand-dark/85 p-6 text-center text-white backdrop-blur-sm">
           <p className="text-3xl">💦</p>
-          <p className="text-xl font-bold">{t.arcade.drownTagline}</p>
+          <p className="text-2xl font-extrabold">{t.arcade.gameOver}</p>
+          <p className="-mt-2 text-sm text-white/70">{t.arcade.drownTagline}</p>
           <div>
             <p className="text-sm text-white/70">{t.arcade.score}</p>
             <p className="text-4xl font-extrabold tabular-nums">{result.score}</p>
@@ -389,7 +390,7 @@ export function ArcadeShell({
               onClick={() => startGame('ponthop')}
               className="rounded-2xl bg-white px-4 py-3 font-semibold text-brand-dark transition hover:bg-white/90"
             >
-              🔁 {t.arcade.restart}
+              🔁 {t.arcade.tryAgain}
             </button>
             <button
               type="button"

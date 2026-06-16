@@ -61,6 +61,8 @@ export interface Strings {
     paused: string
     pausedDeparture: string
     drownTagline: string
+    gameOver: string
+    tryAgain: string
     mute: string
     unmute: string
     whichFerry: string
@@ -152,6 +154,8 @@ export const STRINGS: Record<Lang, Strings> = {
       paused: 'Gepauzeerd',
       pausedDeparture: 'Je pont vertrekt zo — eerst varen.',
       drownTagline: 'Niet zweten, niet zwemmen',
+      gameOver: 'Game over',
+      tryAgain: 'Probeer opnieuw',
       mute: 'Geluid uit',
       unmute: 'Geluid aan',
       whichFerry: 'Welke pont wacht je op?',
@@ -241,6 +245,8 @@ export const STRINGS: Record<Lang, Strings> = {
       paused: 'Paused',
       pausedDeparture: 'Your ferry leaves soon — catch it first.',
       drownTagline: "Don't sweat, don't swim",
+      gameOver: 'Game over',
+      tryAgain: 'Try again',
       mute: 'Mute',
       unmute: 'Unmute',
       whichFerry: 'Which ferry are you waiting for?',
