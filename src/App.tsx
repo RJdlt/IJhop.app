@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Header } from './components/Header'
 import { RouteCard } from './components/RouteCard'
 import { CatchPanel } from './components/CatchPanel'
@@ -11,7 +11,9 @@ import type { FerryOption } from './components/FerryPicker'
 import { ArcadeShell } from './arcade/ArcadeShell'
 import { useNow } from './hooks/useNow'
 import { useAnonSession } from './hooks/useAnonSession'
+import { usePresence } from './hooks/usePresence'
 import { useHashView } from './hooks/useHashView'
+import { getNickname } from './lib/nickname'
 import { useI18n } from './i18n/i18n'
 import { amsterdamMoment } from './lib/time'
 import { clockCountdown } from './lib/format'
@@ -35,6 +37,10 @@ const DIRECTIONS: Record<LineId, [StopPair, StopPair]> = {
 const SOON_SECONDS = 60
 // Boven deze grens is het aftelbalkje nog niet relevant.
 const BANNER_SECONDS = 300
+// De overtocht-ranglijst wordt actief vanaf zo lang vóór vertrek (instappen)…
+const CROSSING_PRE_SECONDS = 300
+// …en blijft het de ~overtochtsduur lopen (de "13 minuten dat je erop staat").
+const CROSSING_RIDE_MS = 13 * 60 * 1000
 const WATCH_KEY = 'ijhop.arcade.watch'
 
 const connKey = (c: StopPair) => `${c.line}:${c.from}:${c.to}`
@@ -94,14 +100,44 @@ export default function App() {
       </span>
     ) : null
 
-  // Kamer van de gekozen overtocht: lijn+richting + het vertrekmoment, zodat
-  // iedereen die dezelfde afvaart kiest in dezelfde overtocht-ranglijst valt.
-  // (Som blijft stabiel: nu loopt op, secondsUntil telt even hard af.)
-  const crossingRoom =
-    watched && watchedSecs != null
-      ? `${watched.key}@${Math.floor(nowSecondOfWeek + watchedSecs)}`
-      : null
-  const crossingLabel = watched ? `${watched.line} → ${t.stopNames[watched.to]}` : undefined
+  // De overtocht-ranglijst is alleen actief rond de afvaart die je pakt: vanaf
+  // het instappen (≤ CROSSING_PRE_SECONDS vóór vertrek) tot ~de overtochtsduur
+  // erna. De gekozen overtocht wordt "vastgepind" zodra je in dat venster komt,
+  // en blijft staan terwijl de aftelklok al naar de vólgende afvaart springt —
+  // precies "de minuten dat je erop staat".
+  const [activeCrossing, setActiveCrossing] = useState<{
+    room: string
+    label: string
+    untilMs: number
+  } | null>(null)
+
+  useEffect(() => {
+    const nowMs = now.getTime()
+    if (activeCrossing && nowMs > activeCrossing.untilMs) {
+      setActiveCrossing(null)
+      return
+    }
+    if (!activeCrossing && watched && watchedSecs != null && watchedSecs <= CROSSING_PRE_SECONDS) {
+      // Som = geplande vertrek-seconde (zelfde geheel getal voor iedereen).
+      const departSow = Math.floor(nowSecondOfWeek + watchedSecs)
+      setActiveCrossing({
+        room: `${watched.key}@${departSow}`,
+        label: `${watched.line} → ${t.stopNames[watched.to]}`,
+        untilMs: nowMs + watchedSecs * 1000 + CROSSING_RIDE_MS,
+      })
+    }
+  }, [now, watched, watchedSecs, activeCrossing, nowSecondOfWeek, t])
+
+  const crossingRoom = activeCrossing?.room ?? null
+  const crossingLabel = activeCrossing?.label
+
+  // Live spelers-teller op deze overtocht (presence), terwijl de arcade open is.
+  const presenceNick = useMemo(() => getNickname(), [])
+  const crossingPlayers = usePresence(
+    crossingRoom && (view === 'arcade' || arcadeOpen) ? `arcade:${crossingRoom}` : null,
+    userId,
+    presenceNick,
+  )
 
   const ferryPicker = (
     <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
@@ -141,6 +177,7 @@ export default function App() {
                 banner={ferryBanner}
                 crossingRoom={crossingRoom}
                 crossingLabel={crossingLabel}
+                crossingPlayers={crossingPlayers}
               />
             </div>
           </main>
@@ -172,6 +209,7 @@ export default function App() {
               banner={ferryBanner}
               crossingRoom={crossingRoom}
               crossingLabel={crossingLabel}
+              crossingPlayers={crossingPlayers}
               onClose={() => setArcadeOpen(false)}
             />
           </div>

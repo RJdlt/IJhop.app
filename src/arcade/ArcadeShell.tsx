@@ -30,6 +30,8 @@ interface ArcadeShellProps {
   crossingRoom?: string | null
   /** Korte omschrijving van de overtocht voor de kop (bijv. "F7 → NDSM"). */
   crossingLabel?: string
+  /** Aantal spelers dat nu live op deze overtocht zit (presence). */
+  crossingPlayers?: number
   /** Toont in de pauze-sluier een knop om de pauze te negeren. */
   onDismissPause?: () => void
   dismissLabel?: string
@@ -46,6 +48,7 @@ export function ArcadeShell({
   banner,
   crossingRoom,
   crossingLabel,
+  crossingPlayers,
   onDismissPause,
   dismissLabel,
 }: ArcadeShellProps) {
@@ -251,7 +254,9 @@ export function ArcadeShell({
       youName={nick.trim()}
       reloadKey={boardReload}
       room={crossingRoom}
-      title={`🚤 ${t.arcade.thisCrossing}${crossingLabel ? ` · ${crossingLabel}` : ''}`}
+      title={`🚤 ${t.arcade.thisCrossing}${crossingLabel ? ` · ${crossingLabel}` : ''}${
+        crossingPlayers && crossingPlayers > 0 ? ` · 👥 ${crossingPlayers}` : ''
+      }`}
     />
   ) : null
 
