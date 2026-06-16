@@ -4,6 +4,7 @@ import { clockCountdown, relativeLabel } from '../lib/format'
 import { LINES, nextDepartures } from '../lib/schedule'
 import type { StopPair } from '../lib/schedule'
 import { getNickname } from '../lib/nickname'
+import { roomKeyFor, duelChannelFor } from '../lib/rooms'
 import { usePresence } from '../hooks/usePresence'
 import { SwapIcon } from './icons'
 import { ReactionDuel } from './ReactionDuel'
@@ -24,7 +25,7 @@ export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap }: Route
 
   // Presence per route: wie wacht er mee op deze afvaart?
   const nick = useMemo(() => getNickname(), [])
-  const roomKey = `route:${line}:${from}:${to}`
+  const roomKey = roomKeyFor(connection)
   const waiters = usePresence(roomKey, userId, nick)
 
   return (
@@ -94,7 +95,7 @@ export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap }: Route
         <div className="border-t border-slate-100 px-5 py-4 dark:border-white/5">
           <p className="mb-2 text-xs font-medium text-slate-400">👥 {waiters} wachten mee</p>
           <ReactionDuel
-            channelName={`${roomKey}:duel`}
+            channelName={duelChannelFor(roomKey)}
             userId={userId}
             nick={nick}
             playerCount={waiters}
