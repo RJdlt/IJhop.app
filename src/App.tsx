@@ -76,7 +76,9 @@ export default function App() {
           </main>
         ) : (
           <main className="flex flex-1 flex-col">
-            <div className="min-h-[70vh] flex-1">
+            {/* Concrete dvh-hoogte i.p.v. een height:100%-keten, die iOS Safari
+                niet betrouwbaar doorrekent — zo wordt het speelveld groot. */}
+            <div className="h-[78dvh] min-h-[420px] w-full">
               <ArcadeShell paused={nearDeparture} />
             </div>
           </main>
