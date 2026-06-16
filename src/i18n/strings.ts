@@ -67,6 +67,10 @@ export interface Strings {
     justPlaying: string
     ferryLeaves: string
     playAnyway: string
+    yourName: string
+    save: string
+    leaderboard: string
+    noScoresYet: string
   }
 }
 
@@ -138,6 +142,10 @@ export const STRINGS: Record<Lang, Strings> = {
       justPlaying: 'Alleen spelen',
       ferryLeaves: 'vertrekt zo',
       playAnyway: 'Speel toch door',
+      yourName: 'Jouw naam',
+      save: 'Opslaan',
+      leaderboard: 'Toplijst',
+      noScoresYet: 'Nog geen scores — speel de eerste!',
     },
   },
   en: {
@@ -207,6 +215,10 @@ export const STRINGS: Record<Lang, Strings> = {
       justPlaying: 'Just playing',
       ferryLeaves: 'leaves soon',
       playAnyway: 'Keep playing',
+      yourName: 'Your name',
+      save: 'Save',
+      leaderboard: 'Leaderboard',
+      noScoresYet: 'No scores yet — be the first!',
     },
   },
 }

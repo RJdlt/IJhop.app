@@ -3,6 +3,7 @@ import { createWorld, resizeWorld, worldHop, worldStep } from './engine'
 import type { World } from './engine'
 import { render } from './render'
 import { Sfx } from './audio'
+import { applyRunResult, loadProfile, runLevel, runReward, saveProfile } from './profile'
 
 /**
  * Pont Hop — Kapitein Pim steekt het IJ over: hop van steiger naar steiger,
@@ -39,7 +40,16 @@ export function createPontHop(): GameModule {
       state = 'over'
       sfx.splash()
       cancelAnimationFrame(raf)
-      opts.onGameOver(world.score)
+      // Bonus-stroopwafels (verzamelde munten + afstand) in de spaarpot.
+      const run = { crossings: world.crossings, coins: world.coins }
+      const reward = runReward(run)
+      const profile = applyRunResult(loadProfile(), run)
+      saveProfile(profile)
+      opts.onGameOver(world.score, [
+        { label: 'Level', value: String(runLevel(world.crossings)) },
+        { label: 'Bonus 🧇', value: `+${reward}` },
+        { label: 'Totaal 🧇', value: String(profile.wallet) },
+      ])
       return
     }
     raf = requestAnimationFrame(frame)

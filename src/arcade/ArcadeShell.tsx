@@ -5,7 +5,13 @@ import { GAMES, getGame } from './registry'
 import { attachInput } from './input'
 import type { InputHandle } from './input'
 import { getHighScore, recordScore } from './scoreStore'
-import type { GameInitOpts, GameModule } from './types'
+import { submitScore, topScores } from './leaderboard'
+import type { ScoreRow } from './leaderboard'
+import { getNickname, setNickname, NICK_MAX } from '../lib/nickname'
+import type { GameInitOpts, GameModule, GameOverLine } from './types'
+
+// Eén spel voor nu; de ranglijst draait op dit spel-id.
+const BOARD_GAME = GAMES[0]?.id ?? 'ponthop'
 
 type Screen = 'menu' | 'playing' | 'over'
 
@@ -47,9 +53,23 @@ export function ArcadeShell({
 
   const [screen, setScreen] = useState<Screen>('menu')
   const [score, setScore] = useState(0)
-  const [result, setResult] = useState<{ score: number; high: number; isRecord: boolean } | null>(
-    null,
-  )
+  const [result, setResult] = useState<{
+    score: number
+    high: number
+    isRecord: boolean
+    lines: GameOverLine[]
+  } | null>(null)
+  const [nick, setNick] = useState(() => getNickname())
+  const nickRef = useRef(nick)
+  nickRef.current = nick
+  const [board, setBoard] = useState<ScoreRow[]>([])
+  const refreshBoard = useCallback(() => {
+    topScores(BOARD_GAME, 10).then(setBoard)
+  }, [])
+  const saveNick = () => {
+    const clean = setNickname(nick)
+    if (clean) setNick(clean)
+  }
   const [muted, setMuted] = useState(
     // Geluid staat standaard uit; alleen 'aan' als de speler dat ooit koos.
     () => typeof window === 'undefined' || window.localStorage.getItem(MUTE_KEY) !== '0',
@@ -126,11 +146,13 @@ export function ArcadeShell({
         height: sized.h,
         dpr: sized.dpr,
         onScoreChange: (s) => setScore(s),
-        onGameOver: (s) => {
+        onGameOver: (s, lines) => {
           const { high, isRecord } = recordScore(id, s)
           detachInput()
-          setResult({ score: s, high, isRecord })
+          setResult({ score: s, high, isRecord, lines: lines ?? [] })
           setScreen('over')
+          // Score de online ranglijst in sturen en de lijst verversen.
+          submitScore(id, nickRef.current.trim() || getNickname(), s).then(refreshBoard)
         },
       }
       optsRef.current = opts
@@ -179,6 +201,11 @@ export function ArcadeShell({
   // Ruim alles netjes op bij unmount (geen lekken bij herstart).
   useEffect(() => () => teardownGame(), [teardownGame])
 
+  // Ververs de ranglijst zodra we het menu of het game-over-scherm tonen.
+  useEffect(() => {
+    if (screen === 'menu' || screen === 'over') refreshBoard()
+  }, [screen, refreshBoard])
+
   const toggleMute = () =>
     setMuted((m) => {
       const next = !m
@@ -192,6 +219,47 @@ export function ArcadeShell({
     })
 
   const showPauseVeil = screen === 'playing' && paused
+
+  const nameField = (
+    <div className="w-full max-w-xs text-left">
+      <label htmlFor="arcade-nick" className="block text-xs font-medium text-white/60">
+        {t.arcade.yourName}
+      </label>
+      <input
+        id="arcade-nick"
+        value={nick}
+        onChange={(e) => setNick(e.target.value)}
+        onBlur={saveNick}
+        maxLength={NICK_MAX}
+        placeholder={t.arcade.yourName}
+        className="mt-1 w-full rounded-xl bg-white/10 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40 focus:bg-white/15"
+      />
+    </div>
+  )
+
+  const leaderboard = (
+    <div className="w-full max-w-xs text-left">
+      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
+        🏆 {t.arcade.leaderboard}
+      </p>
+      {board.length === 0 ? (
+        <p className="text-xs text-white/50">{t.arcade.noScoresYet}</p>
+      ) : (
+        <ol className="flex flex-col gap-1">
+          {board.map((r, i) => (
+            <li
+              key={`${r.name}-${i}`}
+              className="flex items-center gap-2 rounded-lg bg-white/5 px-2.5 py-1.5 text-sm"
+            >
+              <span className="w-5 shrink-0 tabular-nums text-white/50">{i + 1}</span>
+              <span className="flex-1 truncate">{r.name}</span>
+              <span className="font-semibold tabular-nums">{r.score}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  )
 
   return (
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden rounded-3xl bg-brand-dark">
@@ -240,6 +308,7 @@ export function ArcadeShell({
             <p className="text-2xl font-bold">{t.arcade.title}</p>
             <p className="mt-1 text-sm text-white/70">{t.arcade.pickGame}</p>
           </div>
+          {nameField}
           {menuExtra}
           <div className="flex w-full max-w-xs flex-col gap-2.5">
             {GAMES.map((g) => (
@@ -260,6 +329,7 @@ export function ArcadeShell({
               </button>
             ))}
           </div>
+          {leaderboard}
           {onClose && (
             <button
               type="button"
@@ -301,6 +371,17 @@ export function ArcadeShell({
               {result.isRecord ? `🏆 ${t.arcade.newRecord}` : `${t.arcade.best}: ${result.high}`}
             </p>
           </div>
+          {result.lines.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {result.lines.map((l, i) => (
+                <span key={i} className="rounded-full bg-white/10 px-3 py-1 text-sm">
+                  <span className="text-white/60">{l.label} </span>
+                  <span className="font-semibold tabular-nums">{l.value}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          {leaderboard}
           <div className="flex w-full max-w-xs flex-col gap-2">
             <button
               type="button"
