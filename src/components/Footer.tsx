@@ -19,6 +19,7 @@ export function Footer() {
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
         {t.offlineReady}
       </p>
+      <p className="text-[10px] text-slate-300 dark:text-slate-600">v{__BUILD_ID__}</p>
     </footer>
   )
 }
