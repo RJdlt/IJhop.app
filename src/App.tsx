@@ -43,6 +43,7 @@ export default function App() {
                 key={line}
                 connection={connection}
                 nowSecondOfWeek={nowSecondOfWeek}
+                userId={userId}
                 onSwap={() => swap(line)}
               />
             )

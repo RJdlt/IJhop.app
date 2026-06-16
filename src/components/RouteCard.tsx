@@ -1,21 +1,31 @@
+import { useMemo } from 'react'
 import { useI18n } from '../i18n/i18n'
 import { clockCountdown, relativeLabel } from '../lib/format'
 import { LINES, nextDepartures } from '../lib/schedule'
 import type { StopPair } from '../lib/schedule'
+import { getNickname } from '../lib/nickname'
+import { usePresence } from '../hooks/usePresence'
 import { SwapIcon } from './icons'
+import { ReactionDuel } from './ReactionDuel'
 
 interface RouteCardProps {
   connection: StopPair
   nowSecondOfWeek: number
+  userId: string | null
   onSwap: () => void
 }
 
-export function RouteCard({ connection, nowSecondOfWeek, onSwap }: RouteCardProps) {
+export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap }: RouteCardProps) {
   const { t, lang } = useI18n()
   const { from, to, line } = connection
   const color = LINES[line].color
   const departures = nextDepartures({ from, to, nowSecondOfWeek, limit: 4 })
   const next = departures[0]
+
+  // Presence per route: wie wacht er mee op deze afvaart?
+  const nick = useMemo(() => getNickname(), [])
+  const roomKey = `route:${line}:${from}:${to}`
+  const waiters = usePresence(roomKey, userId, nick)
 
   return (
     <section className="card animate-riseIn overflow-hidden">
@@ -77,6 +87,19 @@ export function RouteCard({ connection, nowSecondOfWeek, onSwap }: RouteCardProp
             </li>
           ))}
         </ul>
+      )}
+
+      {/* Realtime tik-duel: alleen als er minstens twee mensen meewachten */}
+      {waiters >= 2 && (
+        <div className="border-t border-slate-100 px-5 py-4 dark:border-white/5">
+          <p className="mb-2 text-xs font-medium text-slate-400">👥 {waiters} wachten mee</p>
+          <ReactionDuel
+            channelName={`${roomKey}:duel`}
+            userId={userId}
+            nick={nick}
+            playerCount={waiters}
+          />
+        </div>
       )}
     </section>
   )
