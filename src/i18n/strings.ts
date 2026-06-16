@@ -44,6 +44,26 @@ export interface Strings {
   themeDark: string
   stopNames: Record<StopId, string>
   lastUpdated: string
+  // Arcade
+  arcade: {
+    tabFerries: string
+    tabGames: string
+    playWhileWaiting: string
+    title: string
+    pickGame: string
+    play: string
+    restart: string
+    menu: string
+    close: string
+    score: string
+    best: string
+    newRecord: string
+    paused: string
+    pausedDeparture: string
+    drownTagline: string
+    mute: string
+    unmute: string
+  }
 }
 
 export const STRINGS: Record<Lang, Strings> = {
@@ -92,6 +112,25 @@ export const STRINGS: Record<Lang, Strings> = {
       pontsteiger: 'Pontsteiger',
     },
     lastUpdated: 'Dienstregeling bijgewerkt',
+    arcade: {
+      tabFerries: 'Ponten',
+      tabGames: 'Spelletjes',
+      playWhileWaiting: 'Speel terwijl je wacht',
+      title: 'IJhop Arcade',
+      pickGame: 'Kies een spel',
+      play: 'Speel',
+      restart: 'Opnieuw',
+      menu: 'Naar menu',
+      close: 'Sluiten',
+      score: 'Score',
+      best: 'Record',
+      newRecord: 'Nieuw record!',
+      paused: 'Gepauzeerd',
+      pausedDeparture: 'Je pont vertrekt zo — eerst varen.',
+      drownTagline: 'Niet zweten, niet zwemmen',
+      mute: 'Geluid uit',
+      unmute: 'Geluid aan',
+    },
   },
   en: {
     appName: 'IJhop',
@@ -138,5 +177,24 @@ export const STRINGS: Record<Lang, Strings> = {
       pontsteiger: 'Pontsteiger',
     },
     lastUpdated: 'Timetable updated',
+    arcade: {
+      tabFerries: 'Ferries',
+      tabGames: 'Games',
+      playWhileWaiting: 'Play while you wait',
+      title: 'IJhop Arcade',
+      pickGame: 'Pick a game',
+      play: 'Play',
+      restart: 'Restart',
+      menu: 'To menu',
+      close: 'Close',
+      score: 'Score',
+      best: 'Best',
+      newRecord: 'New record!',
+      paused: 'Paused',
+      pausedDeparture: 'Your ferry leaves soon — catch it first.',
+      drownTagline: "Don't sweat, don't swim",
+      mute: 'Mute',
+      unmute: 'Unmute',
+    },
   },
 }
