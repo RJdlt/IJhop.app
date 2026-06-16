@@ -5,10 +5,13 @@ import { CatchPanel } from './components/CatchPanel'
 import { Footer } from './components/Footer'
 import { ArcadeSnack } from './components/ArcadeSnack'
 import { TabBar } from './components/TabBar'
+import { FerryPicker } from './components/FerryPicker'
+import type { FerryOption } from './components/FerryPicker'
 import { ArcadeShell } from './arcade/ArcadeShell'
 import { useNow } from './hooks/useNow'
 import { useAnonSession } from './hooks/useAnonSession'
 import { useHashView } from './hooks/useHashView'
+import { useI18n } from './i18n/i18n'
 import { amsterdamMoment } from './lib/time'
 import { CONNECTIONS, nextDepartures } from './lib/schedule'
 import type { StopPair } from './lib/schedule'
@@ -28,8 +31,12 @@ const DIRECTIONS: Record<LineId, [StopPair, StopPair]> = {
 
 // Onder deze grens pauzeert de arcade: eerst je echte pont halen.
 const NEAR_DEPARTURE_SECONDS = 60
+const WATCH_KEY = 'ijhop.arcade.watch'
+
+const connKey = (c: StopPair) => `${c.line}:${c.from}:${c.to}`
 
 export default function App() {
+  const { t } = useI18n()
   const now = useNow(1000)
   const nowSecondOfWeek = useMemo(() => amsterdamMoment(now).secondOfWeek, [now])
 
@@ -40,16 +47,44 @@ export default function App() {
   const [flipped, setFlipped] = useState<Record<LineId, boolean>>({ F4: false, F7: false })
   const swap = (line: LineId) => setFlipped((f) => ({ ...f, [line]: !f[line] }))
 
-  // Seconden tot de eerstvolgende afvaart in welke richting dan ook.
-  const soonestSeconds = useMemo(() => {
-    let min = Infinity
-    for (const c of CONNECTIONS) {
-      const d = nextDepartures({ from: c.from, to: c.to, nowSecondOfWeek, limit: 1 })[0]
-      if (d && d.secondsUntil < min) min = d.secondsUntil
+  // Welke pont de speler bewust afwacht (null = alleen spelen, nooit pauzeren).
+  const [watchKey, setWatchKey] = useState<string | null>(
+    () => (typeof window === 'undefined' ? null : window.localStorage.getItem(WATCH_KEY)),
+  )
+  const chooseWatch = (key: string | null) => {
+    setWatchKey(key)
+    try {
+      if (key) window.localStorage.setItem(WATCH_KEY, key)
+      else window.localStorage.removeItem(WATCH_KEY)
+    } catch {
+      /* faal stil */
     }
-    return min
-  }, [nowSecondOfWeek])
-  const nearDeparture = soonestSeconds < NEAR_DEPARTURE_SECONDS
+  }
+
+  // Live aftelklok per richting, voor de pont-keuze.
+  const ferryOptions = useMemo<FerryOption[]>(
+    () =>
+      CONNECTIONS.map((c) => ({
+        key: connKey(c),
+        line: c.line,
+        to: c.to,
+        secondsUntil: nextDepartures({ from: c.from, to: c.to, nowSecondOfWeek, limit: 1 })[0]
+          ?.secondsUntil,
+      })),
+    [nowSecondOfWeek],
+  )
+
+  // Alleen de gekozen pont pauzeert het spel.
+  const watched = watchKey ? ferryOptions.find((o) => o.key === watchKey) ?? null : null
+  const nearDeparture =
+    watched?.secondsUntil != null && watched.secondsUntil < NEAR_DEPARTURE_SECONDS
+  const pauseReason = watched
+    ? `${watched.line} → ${t.stopNames[watched.to]} ${t.arcade.ferryLeaves}`
+    : undefined
+
+  const ferryPicker = (
+    <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
+  )
 
   return (
     <div className="water-bg flex min-h-full flex-col">
@@ -79,7 +114,12 @@ export default function App() {
             {/* Concrete dvh-hoogte i.p.v. een height:100%-keten, die iOS Safari
                 niet betrouwbaar doorrekent — zo wordt het speelveld groot. */}
             <div className="h-[78dvh] min-h-[420px] w-full">
-              <ArcadeShell paused={nearDeparture} />
+              <ArcadeShell
+                paused={nearDeparture}
+                pauseReason={pauseReason}
+                menuExtra={ferryPicker}
+                onDismissPause={() => chooseWatch(null)}
+              />
             </div>
           </main>
         )}
@@ -106,6 +146,9 @@ export default function App() {
           <div className="mx-auto h-full max-w-md pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
             <ArcadeShell
               paused={!arcadeOpen || nearDeparture}
+              pauseReason={pauseReason}
+              menuExtra={ferryPicker}
+              onDismissPause={() => chooseWatch(null)}
               onClose={() => setArcadeOpen(false)}
             />
           </div>

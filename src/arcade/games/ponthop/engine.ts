@@ -10,10 +10,10 @@
  * - 'pier'        : veilige steiger (start + finish elke segment).
  * - 'road'        : kade waar watertaxi's/rondvaartboten langs scheuren — raak = dood.
  * - 'water-ferry' : water; alleen veilig óp een varende pont, drijf mee.
- * - 'water-bike'  : water; smallere, snellere drijvende fietsen.
+ * - 'water-sup'   : water; smallere, snellere SUP-boards (stand-up paddle).
  */
 
-export type LaneKind = 'pier' | 'road' | 'water-ferry' | 'water-bike'
+export type LaneKind = 'pier' | 'road' | 'water-ferry' | 'water-sup'
 export type DeathCause = 'water' | 'boat' | 'offscreen' | 'drift'
 
 export interface Lane {
@@ -158,7 +158,7 @@ function chooseDangerKind(rng: () => number): LaneKind {
   const r = rng()
   if (r < 0.4) return 'road'
   if (r < 0.74) return 'water-ferry'
-  return 'water-bike'
+  return 'water-sup'
 }
 
 /** Genereert ontbrekende rijen tot en met `upTo`. */
@@ -313,7 +313,7 @@ export function worldStep(w: World, dt: number): void {
   const lane = w.lanes.get(w.player.row)
 
   // 1. Meedrijven op een pont/fiets.
-  if (lane && (lane.kind === 'water-ferry' || lane.kind === 'water-bike')) {
+  if (lane && (lane.kind === 'water-ferry' || lane.kind === 'water-sup')) {
     const left = platformUnder(lane, w.t, w.player.x)
     if (left !== null) {
       w.player.x += lane.dir * lane.speed * step

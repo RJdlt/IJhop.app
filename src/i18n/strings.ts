@@ -63,6 +63,10 @@ export interface Strings {
     drownTagline: string
     mute: string
     unmute: string
+    whichFerry: string
+    justPlaying: string
+    ferryLeaves: string
+    playAnyway: string
   }
 }
 
@@ -130,6 +134,10 @@ export const STRINGS: Record<Lang, Strings> = {
       drownTagline: 'Niet zweten, niet zwemmen',
       mute: 'Geluid uit',
       unmute: 'Geluid aan',
+      whichFerry: 'Welke pont wacht je op?',
+      justPlaying: 'Alleen spelen',
+      ferryLeaves: 'vertrekt zo',
+      playAnyway: 'Speel toch door',
     },
   },
   en: {
@@ -195,6 +203,10 @@ export const STRINGS: Record<Lang, Strings> = {
       drownTagline: "Don't sweat, don't swim",
       mute: 'Mute',
       unmute: 'Unmute',
+      whichFerry: 'Which ferry are you waiting for?',
+      justPlaying: 'Just playing',
+      ferryLeaves: 'leaves soon',
+      playAnyway: 'Keep playing',
     },
   },
 }

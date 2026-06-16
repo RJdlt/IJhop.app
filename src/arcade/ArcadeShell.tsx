@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { useI18n } from '../i18n/i18n'
 import { GAMES, getGame } from './registry'
 import { attachInput } from './input'
@@ -15,12 +16,24 @@ interface ArcadeShellProps {
   pauseReason?: string
   /** Aanwezig in overlay-modus: toont een sluitknop. */
   onClose?: () => void
+  /** Extra inhoud op het menu (bijv. de pont-keuze). Houdt de shell generiek. */
+  menuExtra?: ReactNode
+  /** Toont in de pauze-sluier een knop om de pauze te negeren. */
+  onDismissPause?: () => void
+  dismissLabel?: string
 }
 
 const MUTE_KEY = 'ijhop.arcade.muted'
 const DPR_CAP = 2 // retina is mooi genoeg; hoger kost fps zonder winst
 
-export function ArcadeShell({ paused = false, pauseReason, onClose }: ArcadeShellProps) {
+export function ArcadeShell({
+  paused = false,
+  pauseReason,
+  onClose,
+  menuExtra,
+  onDismissPause,
+  dismissLabel,
+}: ArcadeShellProps) {
   const { t, lang } = useI18n()
 
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -76,13 +89,25 @@ export function ArcadeShell({ paused = false, pauseReason, onClose }: ArcadeShel
     inputRef.current = attachInput(canvasRef.current, (a) => mod.onInput(a))
   }, [])
 
+  /** Wis het tekenvlak, zodat geen oud game-frame achter het menu blijft staan. */
+  const clearCanvas = useCallback(() => {
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx) return
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.restore()
+  }, [])
+
   const teardownGame = useCallback(() => {
     detachInput()
     moduleRef.current?.stop()
     moduleRef.current?.destroy()
     moduleRef.current = null
     optsRef.current = null
-  }, [detachInput])
+    clearCanvas()
+  }, [detachInput, clearCanvas])
 
   const startGame = useCallback(
     (id: string) => {
@@ -198,13 +223,14 @@ export function ArcadeShell({ paused = false, pauseReason, onClose }: ArcadeShel
         </div>
       )}
 
-      {/* Menu */}
+      {/* Menu (dekkende achtergrond zodat geen game-frame doorschemert) */}
       {screen === 'menu' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 p-6 text-center text-white">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 overflow-y-auto bg-brand-dark p-6 text-center text-white">
           <div>
             <p className="text-2xl font-bold">{t.arcade.title}</p>
             <p className="mt-1 text-sm text-white/70">{t.arcade.pickGame}</p>
           </div>
+          {menuExtra}
           <div className="flex w-full max-w-xs flex-col gap-2.5">
             {GAMES.map((g) => (
               <button
@@ -238,9 +264,18 @@ export function ArcadeShell({ paused = false, pauseReason, onClose }: ArcadeShel
 
       {/* Pauze-sluier */}
       {showPauseVeil && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-brand-dark/80 p-6 text-center text-white backdrop-blur-sm">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-brand-dark/85 p-6 text-center text-white backdrop-blur-sm">
           <p className="text-lg font-bold">⏸️ {t.arcade.paused}</p>
           <p className="max-w-xs text-sm text-white/80">{pauseReason ?? t.arcade.pausedDeparture}</p>
+          {onDismissPause && (
+            <button
+              type="button"
+              onClick={onDismissPause}
+              className="mt-1 rounded-2xl bg-white/15 px-4 py-2 text-sm font-semibold transition hover:bg-white/25"
+            >
+              {dismissLabel ?? t.arcade.playAnyway}
+            </button>
+          )}
         </div>
       )}
 

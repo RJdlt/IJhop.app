@@ -21,7 +21,7 @@ const QUAY = '#566069'
 const PIER = '#E4B27E'
 const PIER_EDGE = '#C8915A'
 const BIKE = '#C98A3B'
-const HAZARD = '#1B2A33'
+const BUS_BLUE = '#0B5FA5'
 const COIN = '#D98A1E'
 const COIN_DK = '#A8650F'
 
@@ -124,8 +124,8 @@ function drawLaneObjects(
   for (const left of lefts) {
     if (left > width || left + lane.width < 0) continue
     if (lane.kind === 'water-ferry') drawFerry(ctx, left, top, lane.width, lane.index)
-    else if (lane.kind === 'water-bike') drawBike(ctx, left, top, lane.width)
-    else drawHazard(ctx, left, top, lane.width, lane.dir)
+    else if (lane.kind === 'water-sup') drawSup(ctx, left, top, lane.width)
+    else drawBus(ctx, left, top, lane.width, lane.dir)
   }
 }
 
@@ -148,29 +148,68 @@ function drawFerry(ctx: CanvasRenderingContext2D, x: number, top: number, w: num
   ctx.fillText(index % 2 === 0 ? 'F4' : 'F7', x + w / 2, top + ROW_H / 2 + 4)
 }
 
-function drawBike(ctx: CanvasRenderingContext2D, x: number, top: number, w: number) {
+// Drijvend SUP-board (stand-up paddleboard) — smal, lichthouten dek.
+function drawSup(ctx: CanvasRenderingContext2D, x: number, top: number, w: number) {
+  const cy = top + ROW_H / 2
   ctx.fillStyle = 'rgba(0,0,0,0.18)'
-  rr(ctx, x + 4, top + ROW_H / 2 - 7, w - 8, 18, 8)
+  ctx.beginPath()
+  ctx.ellipse(x + w / 2, cy + 5, w / 2 - 4, 9, 0, 0, Math.PI * 2)
   ctx.fill()
+  // board: spits aan beide kanten
   ctx.fillStyle = BIKE
-  rr(ctx, x + 4, top + ROW_H / 2 - 10, w - 8, 18, 8)
+  ctx.beginPath()
+  ctx.ellipse(x + w / 2, cy, w / 2 - 2, 11, 0, 0, Math.PI * 2)
   ctx.fill()
-  ctx.fillStyle = 'rgba(255,255,255,0.5)'
-  rr(ctx, x + 8, top + ROW_H / 2 - 7, w - 16, 4, 2)
+  // houtnerf + streep
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(x + 10, cy)
+  ctx.lineTo(x + w - 10, cy)
+  ctx.stroke()
+  // handvat / grip
+  ctx.fillStyle = 'rgba(0,0,0,0.18)'
+  ctx.beginPath()
+  ctx.arc(x + w / 2, cy, 4, 0, Math.PI * 2)
   ctx.fill()
 }
 
-function drawHazard(ctx: CanvasRenderingContext2D, x: number, top: number, w: number, dir: 1 | -1) {
-  ctx.fillStyle = HAZARD
-  rr(ctx, x, top + 8, w, ROW_H - 16, 10)
+// GVB-bus op de kade (gevaar) — duidelijk een bus met ramen en wielen.
+function drawBus(ctx: CanvasRenderingContext2D, x: number, top: number, w: number, dir: 1 | -1) {
+  const bodyTop = top + 8
+  const bodyH = ROW_H - 22
+  // wielen
+  ctx.fillStyle = '#11181C'
+  const wy = bodyTop + bodyH
+  ctx.beginPath()
+  ctx.arc(x + w * 0.24, wy, 6, 0, Math.PI * 2)
+  ctx.arc(x + w * 0.76, wy, 6, 0, Math.PI * 2)
   ctx.fill()
-  // gele streep + "neus" in rijrichting
+  // carrosserie (GVB-blauw)
+  ctx.fillStyle = BUS_BLUE
+  rr(ctx, x + 2, bodyTop, w - 4, bodyH, 9)
+  ctx.fill()
+  // voorruit aan de rijrichting-kant
+  ctx.fillStyle = '#BFE7F7'
+  const front = dir === 1 ? x + w - 16 : x + 6
+  rr(ctx, front, bodyTop + 5, 10, bodyH - 14, 3)
+  ctx.fill()
+  // rij zijramen
+  ctx.fillStyle = '#CFEFFB'
+  const winY = bodyTop + 6
+  const winH = Math.max(7, bodyH * 0.34)
+  const startX = dir === 1 ? x + 8 : x + 18
+  for (let wx = startX; wx < x + w - 22; wx += 16) {
+    rr(ctx, wx, winY, 10, winH, 2)
+    ctx.fill()
+  }
+  // gele accentstreep
   ctx.fillStyle = '#F4C20D'
-  rr(ctx, x + 6, top + ROW_H / 2 - 3, w - 12, 6, 3)
-  ctx.fill()
-  ctx.fillStyle = '#9AD7F0'
-  const nx = dir === 1 ? x + w - 16 : x + 6
-  rr(ctx, nx, top + 13, 10, ROW_H - 26, 3)
+  ctx.fillRect(x + 4, bodyTop + bodyH - 8, w - 8, 4)
+  // koplamp
+  ctx.fillStyle = '#FFE08A'
+  ctx.beginPath()
+  ctx.arc(dir === 1 ? x + w - 6 : x + 6, bodyTop + bodyH - 4, 2.4, 0, Math.PI * 2)
   ctx.fill()
 }
 
