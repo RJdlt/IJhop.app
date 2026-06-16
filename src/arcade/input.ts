@@ -12,9 +12,12 @@ export interface InputHandle {
 
 type Dispatch = (action: InputAction) => void
 
-// Onder TAP_MAX px beweging = tik; daarboven moet het minstens SWIPE_MIN zijn.
-const TAP_MAX = 14
-const SWIPE_MIN = 24
+// Onder TAP_MAX px beweging = tik (vooruit); zijwaarts vegen vraagt minstens
+// SWIPE_MIN px, zodat een kleine vingerbeweging niet meteen registreert.
+const TAP_MAX = 12
+const SWIPE_MIN = 38
+// Negeer acties die sneller dan dit op elkaar komen (per ongeluk dubbel-vuren).
+const MIN_GAP_MS = 90
 
 const KEY_MAP: Record<string, InputAction> = {
   ArrowUp: 'up',
@@ -26,10 +29,19 @@ const KEY_MAP: Record<string, InputAction> = {
 }
 
 /** Koppelt input aan een element. `detach()` verwijdert alle listeners. */
-export function attachInput(target: HTMLElement, dispatch: Dispatch): InputHandle {
+export function attachInput(target: HTMLElement, rawDispatch: Dispatch): InputHandle {
   let sx = 0
   let sy = 0
   let tracking = false
+  let lastAt = 0
+
+  // Coalesceer te snel opeenvolgende acties; voorkomt onbedoeld dubbel-hoppen.
+  const dispatch: Dispatch = (action) => {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    if (now - lastAt < MIN_GAP_MS) return
+    lastAt = now
+    rawDispatch(action)
+  }
 
   const onTouchStart = (e: TouchEvent) => {
     const t = e.changedTouches[0]
