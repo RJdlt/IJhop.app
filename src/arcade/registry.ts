@@ -1,5 +1,6 @@
 import type { GameMeta } from './types'
 import { createPontHop } from './games/ponthop/PontHop'
+import { CharacterShop } from './games/ponthop/CharacterShop'
 
 /**
  * De enige plek waar spellen geregistreerd worden. Een tweede spel toevoegen
@@ -12,6 +13,7 @@ export const GAMES: GameMeta[] = [
     title: { nl: 'Pont Hop', en: 'Pont Hop' },
     tagline: { nl: 'Steek het IJ over', en: 'Cross the IJ' },
     create: createPontHop,
+    MenuPanel: CharacterShop,
   },
 ]
 

@@ -2,8 +2,16 @@ import type { GameInitOpts, GameModule, GameState, InputAction } from '../../typ
 import { createWorld, resizeWorld, worldHop, worldStep } from './engine'
 import type { World } from './engine'
 import { render } from './render'
+import type { Skin } from './render'
 import { Sfx } from './audio'
-import { applyRunResult, loadProfile, runLevel, runReward, saveProfile } from './profile'
+import {
+  applyRunResult,
+  characterById,
+  loadProfile,
+  runLevel,
+  runReward,
+  saveProfile,
+} from './profile'
 
 /**
  * Pont Hop — Kapitein Pim steekt het IJ over: hop van steiger naar steiger,
@@ -18,6 +26,7 @@ export function createPontHop(): GameModule {
   let raf = 0
   let lastT = 0
   let lastScore = 0
+  let skin: Skin = { capColor: '#F08A24', bodyColor: '#15616D' }
   const sfx = new Sfx()
 
   const frame = (now: number) => {
@@ -34,7 +43,7 @@ export function createPontHop(): GameModule {
       opts.onScoreChange(world.score)
     }
 
-    render(ctx, world)
+    render(ctx, world, skin)
 
     if (world.over && wasSafe) {
       state = 'over'
@@ -57,6 +66,9 @@ export function createPontHop(): GameModule {
 
   const begin = () => {
     if (!opts) return
+    // Lees het gekozen poppetje vers in, zodat een shop-keuze meteen meegaat.
+    const character = characterById(loadProfile().selected)
+    skin = { capColor: character.capColor, bodyColor: character.bodyColor }
     world = createWorld({ width: opts.width, height: opts.height, seed: (Date.now() & 0xffffffff) >>> 0 })
     lastScore = 0
     lastT = 0

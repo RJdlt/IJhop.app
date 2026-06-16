@@ -5,6 +5,7 @@ import { CatchPanel } from './components/CatchPanel'
 import { Footer } from './components/Footer'
 import { ArcadeSnack } from './components/ArcadeSnack'
 import { TabBar } from './components/TabBar'
+import { InstallPrompt } from './components/InstallPrompt'
 import { FerryPicker } from './components/FerryPicker'
 import type { FerryOption } from './components/FerryPicker'
 import { ArcadeShell } from './arcade/ArcadeShell'
@@ -119,6 +120,7 @@ export default function App() {
 
             <ArcadeSnack onOpen={() => setArcadeOpen(true)} />
             <CatchPanel nowSecondOfWeek={nowSecondOfWeek} />
+            <InstallPrompt />
           </main>
         ) : (
           <main className="flex flex-1 flex-col">

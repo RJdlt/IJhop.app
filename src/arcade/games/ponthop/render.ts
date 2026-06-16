@@ -36,7 +36,28 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
   ctx.closePath()
 }
 
-export function render(ctx: CanvasRenderingContext2D, w: World): void {
+export interface Skin {
+  capColor: string
+  bodyColor: string
+}
+
+const DEFAULT_SKIN: Skin = { capColor: '#F08A24', bodyColor: '#15616D' }
+
+/** Verdonkert een hex-kleur (0..1) — voor de "gevaar"-tint van het lijf. */
+function darken(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16)
+  const f = 1 - amount
+  const r = Math.round(((n >> 16) & 255) * f)
+  const g = Math.round(((n >> 8) & 255) * f)
+  const b = Math.round((n & 255) * f)
+  return `rgb(${r},${g},${b})`
+}
+
+export function render(
+  ctx: CanvasRenderingContext2D,
+  w: World,
+  skin: Skin = DEFAULT_SKIN,
+): void {
   const { width, height, cameraY, t } = w
   // worldY -> schermY (hoger in de wereld = hoger in beeld)
   const sy = (worldY: number) => height - (worldY - cameraY)
@@ -60,7 +81,7 @@ export function render(ctx: CanvasRenderingContext2D, w: World): void {
     if (lane.coinX !== null && !lane.coinTaken) drawCoin(ctx, lane.coinX, bandTop + ROW_H / 2)
   }
 
-  drawPlayer(ctx, w.player.x, sy(playerWorldY(w)), onSafeGround(w))
+  drawPlayer(ctx, w.player.x, sy(playerWorldY(w)), onSafeGround(w), skin)
 
   if (w.started && w.idleFor > 2.5 && !w.over) drawIdleHint(ctx, width, height)
 }
@@ -232,14 +253,20 @@ function drawCoin(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
   }
 }
 
-function drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, safe: boolean) {
+function drawPlayer(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  safe: boolean,
+  skin: Skin,
+) {
   // schaduw
   ctx.fillStyle = 'rgba(0,0,0,0.2)'
   ctx.beginPath()
   ctx.ellipse(x, y + PLAYER_HALF - 2, PLAYER_HALF, 6, 0, 0, Math.PI * 2)
   ctx.fill()
-  // lijf
-  ctx.fillStyle = safe ? '#15616D' : '#0B3B43'
+  // lijf (gevaar = donkerder)
+  ctx.fillStyle = safe ? skin.bodyColor : darken(skin.bodyColor, 0.4)
   rr(ctx, x - 12, y - 2, 24, 18, 6)
   ctx.fill()
   // hoofd
@@ -247,8 +274,8 @@ function drawPlayer(ctx: CanvasRenderingContext2D, x: number, y: number, safe: b
   ctx.beginPath()
   ctx.arc(x, y - 6, PLAYER_HALF, 0, Math.PI * 2)
   ctx.fill()
-  // oranje pet van Kapitein Pim
-  ctx.fillStyle = '#F08A24'
+  // pet in de kleur van het gekozen poppetje
+  ctx.fillStyle = skin.capColor
   ctx.beginPath()
   ctx.arc(x, y - 9, PLAYER_HALF, Math.PI, 0)
   ctx.fill()

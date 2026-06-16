@@ -71,6 +71,22 @@ export interface Strings {
     save: string
     leaderboard: string
     noScoresYet: string
+    shopTitle: string
+    playerLevel: string
+    choose: string
+    chosen: string
+    buy: string
+    unlockAt: string
+  }
+  install: {
+    title: string
+    subtitle: string
+    iosTitle: string
+    ios1: string
+    ios2: string
+    ios3: string
+    button: string
+    dismiss: string
   }
 }
 
@@ -146,6 +162,22 @@ export const STRINGS: Record<Lang, Strings> = {
       save: 'Opslaan',
       leaderboard: 'Toplijst',
       noScoresYet: 'Nog geen scores — speel de eerste!',
+      shopTitle: 'Poppetjes',
+      playerLevel: 'Niveau',
+      choose: 'Kies',
+      chosen: 'Gekozen',
+      buy: 'Koop',
+      unlockAt: 'Vrij bij',
+    },
+    install: {
+      title: 'Zet IJhop op je beginscherm',
+      subtitle: 'Open ’m als een echte app — schermvullend, sneller te openen en werkt offline.',
+      iosTitle: 'Toevoegen op iPhone of iPad',
+      ios1: 'Tik op het deelknopje onderaan in Safari',
+      ios2: 'Tik op “Zet op beginscherm”',
+      ios3: 'Open IJhop voortaan via het icoon op je startscherm',
+      button: 'Zet op beginscherm',
+      dismiss: 'Niet nu',
     },
   },
   en: {
@@ -219,6 +251,22 @@ export const STRINGS: Record<Lang, Strings> = {
       save: 'Save',
       leaderboard: 'Leaderboard',
       noScoresYet: 'No scores yet — be the first!',
+      shopTitle: 'Characters',
+      playerLevel: 'Level',
+      choose: 'Select',
+      chosen: 'Selected',
+      buy: 'Buy',
+      unlockAt: 'Unlock at',
+    },
+    install: {
+      title: 'Add IJhop to your home screen',
+      subtitle: 'Open it like a real app — full screen, quicker to launch and works offline.',
+      iosTitle: 'Add it on iPhone or iPad',
+      ios1: 'Tap the share button at the bottom of Safari',
+      ios2: 'Tap “Add to Home Screen”',
+      ios3: 'From now on open IJhop via the icon on your home screen',
+      button: 'Add to home screen',
+      dismiss: 'Not now',
     },
   },
 }

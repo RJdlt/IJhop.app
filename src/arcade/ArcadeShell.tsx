@@ -329,6 +329,7 @@ export function ArcadeShell({
               </button>
             ))}
           </div>
+          {GAMES.map((g) => (g.MenuPanel ? <g.MenuPanel key={g.id} /> : null))}
           {leaderboard}
           {onClose && (
             <button
