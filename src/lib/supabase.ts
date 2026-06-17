@@ -22,6 +22,22 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 export const supabase: SupabaseClient | null =
   url && anonKey ? createClient(url, anonKey) : null
 
+/** Zorgt voor een (anonieme) sessie en geeft het user-id terug, of null. */
+export async function ensureAnonSession(): Promise<string | null> {
+  const client = supabase
+  if (!client) return null
+  try {
+    const {
+      data: { session },
+    } = await client.auth.getSession()
+    if (session?.user) return session.user.id
+    const { data } = await client.auth.signInAnonymously()
+    return data.user?.id ?? null
+  } catch {
+    return null
+  }
+}
+
 if (!supabase) {
   console.warn(
     'Supabase niet geconfigureerd: VITE_SUPABASE_URL of VITE_SUPABASE_ANON_KEY ontbreekt.'

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useI18n } from '../../../i18n/i18n'
+import { track } from '../../../lib/analytics'
 import {
   CHARACTERS,
   buyCharacter,
@@ -36,8 +37,13 @@ export function CharacterShop() {
 
   const onPick = (card: Card) => {
     if (card.selected) return
-    if (card.unlocked) commit(selectCharacter(profile, card.char.id))
-    else if (card.buyable) commit(buyCharacter(profile, card.char.id))
+    if (card.unlocked) {
+      commit(selectCharacter(profile, card.char.id))
+      track('character_select', { id: card.char.id })
+    } else if (card.buyable) {
+      commit(buyCharacter(profile, card.char.id))
+      track('character_buy', { id: card.char.id })
+    }
   }
 
   const statusLabel = (card: Card): string => {

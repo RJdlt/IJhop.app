@@ -9,6 +9,7 @@ import { submitScore } from './leaderboard'
 import { Leaderboard } from './Leaderboard'
 import { getNickname, setNickname, NICK_MAX } from '../lib/nickname'
 import { hasProfanity, sanitizeName } from '../lib/profanity'
+import { track } from '../lib/analytics'
 import type { GameInitOpts, GameModule, GameOverLine } from './types'
 
 // Eén spel voor nu; de ranglijst draait op dit spel-id.
@@ -178,6 +179,7 @@ export function ArcadeShell({
           detachInput()
           setResult({ score: s, high, isRecord, lines: lines ?? [] })
           setScreen('over')
+          track('game_over', { game: id, score: s, isRecord })
           // Score insturen (ook getagd met de overtocht) en lijsten verversen.
           submitScore(id, nickRef.current.trim() || getNickname(), s, crossingRef.current).then(
             () => setBoardReload((k) => k + 1),
@@ -195,6 +197,7 @@ export function ArcadeShell({
       mod.start()
       attachInputNow()
       setScreen('playing')
+      track('game_start', { game: id })
     },
     [teardownGame, sizeCanvas, detachInput, attachInputNow, muted],
   )

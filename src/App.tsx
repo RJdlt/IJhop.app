@@ -15,6 +15,7 @@ import { usePresence } from './hooks/usePresence'
 import { useHashView } from './hooks/useHashView'
 import { getNickname } from './lib/nickname'
 import { setupPwaAutoUpdate } from './pwa'
+import { startAnalytics, track } from './lib/analytics'
 import { useI18n } from './i18n/i18n'
 import { amsterdamMoment } from './lib/time'
 import { clockCountdown } from './lib/format'
@@ -59,6 +60,12 @@ export default function App() {
   const [updateReady, setUpdateReady] = useState(false)
   useEffect(() => setupPwaAutoUpdate(() => setUpdateReady(true)), [])
 
+  // Analytics: sessiestart + welke tab je bekijkt.
+  useEffect(() => startAnalytics(), [])
+  useEffect(() => {
+    track('tab_view', { view })
+  }, [view])
+
   const [flipped, setFlipped] = useState<Record<LineId, boolean>>({ F4: false, F7: false })
   const swap = (line: LineId) => setFlipped((f) => ({ ...f, [line]: !f[line] }))
 
@@ -68,6 +75,7 @@ export default function App() {
   )
   const chooseWatch = (key: string | null) => {
     setWatchKey(key)
+    track('ferry_pick', { key })
     try {
       if (key) window.localStorage.setItem(WATCH_KEY, key)
       else window.localStorage.removeItem(WATCH_KEY)
@@ -169,7 +177,12 @@ export default function App() {
               )
             })}
 
-            <ArcadeSnack onOpen={() => setArcadeOpen(true)} />
+            <ArcadeSnack
+              onOpen={() => {
+                track('snack_open')
+                setArcadeOpen(true)
+              }}
+            />
             <CatchPanel nowSecondOfWeek={nowSecondOfWeek} />
             <InstallPrompt />
           </main>
