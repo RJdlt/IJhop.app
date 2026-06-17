@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useI18n } from '../i18n/i18n'
-import { subscribeScores, topScores, type Board, type Period } from './leaderboard'
+import { getLastSubmitError, subscribeScores, topScores, type Board, type Period } from './leaderboard'
 
 interface LeaderboardProps {
   gameId: string
@@ -64,6 +64,9 @@ export function Leaderboard({ gameId, youName, reloadKey, room, title }: Leaderb
         )}
       </div>
 
+      {getLastSubmitError() && (
+        <p className="mb-1 text-[11px] text-amber-300/80">⚠️ {getLastSubmitError()}</p>
+      )}
       {board.rows.length === 0 ? (
         <p className="text-xs text-white/50">{t.arcade.noScoresYet}</p>
       ) : (

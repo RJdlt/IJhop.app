@@ -40,7 +40,7 @@ export const CHARACTERS: Character[] = [
     emoji: '📸',
     capColor: '#E2231A',
     bodyColor: '#F4C20D',
-    unlock: { type: 'milestone', crossings: 8 },
+    unlock: { type: 'milestone', crossings: 30 },
   },
   {
     id: 'conducteur',
@@ -48,7 +48,7 @@ export const CHARACTERS: Character[] = [
     emoji: '🎫',
     capColor: '#0B5FA5',
     bodyColor: '#062F52',
-    unlock: { type: 'milestone', crossings: 20 },
+    unlock: { type: 'milestone', crossings: 80 },
   },
   {
     id: 'wielrenner',
@@ -56,7 +56,7 @@ export const CHARACTERS: Character[] = [
     emoji: '🚴',
     capColor: '#111827',
     bodyColor: '#F4C20D',
-    unlock: { type: 'shop', cost: 25 },
+    unlock: { type: 'shop', cost: 150 },
   },
   {
     id: 'koning',
@@ -64,7 +64,7 @@ export const CHARACTERS: Character[] = [
     emoji: '👑',
     capColor: '#FF7A00',
     bodyColor: '#FF9E1B',
-    unlock: { type: 'shop', cost: 60 },
+    unlock: { type: 'shop', cost: 450 },
   },
   {
     id: 'kat',
@@ -72,7 +72,7 @@ export const CHARACTERS: Character[] = [
     emoji: '🐈',
     capColor: '#6B7280',
     bodyColor: '#4B5563',
-    unlock: { type: 'shop', cost: 120 },
+    unlock: { type: 'shop', cost: 1000 },
   },
 ]
 
@@ -157,9 +157,10 @@ export interface RunResult {
   coins: number
 }
 
-/** Stroopwafels die een run oplevert: verzamelde munten + afstand-bonus. */
+/** Stroopwafels die een run oplevert: verzamelde munten + een bescheiden
+ *  afstand-bonus. Bewust karig — poppetjes moeten een uitdaging zijn. */
 export function runReward({ crossings, coins }: RunResult): number {
-  return coins + crossings
+  return coins + Math.floor(crossings / 2)
 }
 
 /** Verwerkt het einde van een run: bonus in de portemonnee, overstekens bij het

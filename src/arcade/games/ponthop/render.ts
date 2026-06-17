@@ -37,11 +37,13 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 }
 
 export interface Skin {
+  /** Poppetje-id, bepaalt de hoofddeksel/accessoire. */
+  kind: string
   capColor: string
   bodyColor: string
 }
 
-const DEFAULT_SKIN: Skin = { capColor: '#F08A24', bodyColor: '#15616D' }
+const DEFAULT_SKIN: Skin = { kind: 'pim', capColor: '#F08A24', bodyColor: '#15616D' }
 
 /** Verdonkert een hex-kleur (0..1) — voor de "gevaar"-tint van het lijf. */
 function darken(hex: string, amount: number): string {
@@ -63,6 +65,10 @@ export function render(
   const sy = (worldY: number) => height - (worldY - cameraY)
 
   ctx.clearRect(0, 0, width, height)
+  // Water-basis over het hele veld: zo oogt de ruimte onder de startsteiger als
+  // het IJ i.p.v. een afgekapt leeg vlak. Banen tekenen er dekkend overheen.
+  ctx.fillStyle = WATER_DK
+  ctx.fillRect(0, 0, width, height)
 
   const firstRow = Math.floor(cameraY / ROW_H) - 1
   const lastRow = Math.ceil((cameraY + height) / ROW_H) + 1
@@ -253,6 +259,15 @@ function drawCoin(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
   }
 }
 
+function tri(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, cx: number, cy: number) {
+  ctx.beginPath()
+  ctx.moveTo(ax, ay)
+  ctx.lineTo(bx, by)
+  ctx.lineTo(cx, cy)
+  ctx.closePath()
+  ctx.fill()
+}
+
 function drawPlayer(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -260,32 +275,120 @@ function drawPlayer(
   safe: boolean,
   skin: Skin,
 ) {
+  const r = PLAYER_HALF
+  const hy = y - 6 // hoofd-midden
+  const isCat = skin.kind === 'pontkat'
+
   // schaduw
   ctx.fillStyle = 'rgba(0,0,0,0.2)'
   ctx.beginPath()
-  ctx.ellipse(x, y + PLAYER_HALF - 2, PLAYER_HALF, 6, 0, 0, Math.PI * 2)
+  ctx.ellipse(x, y + r - 2, r, 6, 0, 0, Math.PI * 2)
   ctx.fill()
+
   // lijf (gevaar = donkerder)
   ctx.fillStyle = safe ? skin.bodyColor : darken(skin.bodyColor, 0.4)
   rr(ctx, x - 12, y - 2, 24, 18, 6)
   ctx.fill()
-  // hoofd
-  ctx.fillStyle = '#FFE0B8'
+
+  // hoofd (kat heeft een vacht-kleurige kop)
+  ctx.fillStyle = isCat ? skin.bodyColor : '#FFE0B8'
   ctx.beginPath()
-  ctx.arc(x, y - 6, PLAYER_HALF, 0, Math.PI * 2)
+  ctx.arc(x, hy, r, 0, Math.PI * 2)
   ctx.fill()
-  // pet in de kleur van het gekozen poppetje
+
+  // hoofddeksel / accessoire per poppetje
   ctx.fillStyle = skin.capColor
-  ctx.beginPath()
-  ctx.arc(x, y - 9, PLAYER_HALF, Math.PI, 0)
-  ctx.fill()
-  ctx.fillRect(x - PLAYER_HALF - 3, y - 9, (PLAYER_HALF + 3) * 2, 4)
+  switch (skin.kind) {
+    case 'wielrenner': {
+      // gladde helm
+      ctx.beginPath()
+      ctx.arc(x, hy - 1, r, Math.PI, 0)
+      ctx.fill()
+      ctx.fillStyle = darken(skin.capColor, 0.3)
+      ctx.fillRect(x - 1, hy - r, 2, 7)
+      break
+    }
+    case 'koning': {
+      // gouden kroon met punten
+      ctx.fillStyle = '#FFC83D'
+      const top = hy - r + 2
+      const w = r * 1.7
+      ctx.beginPath()
+      ctx.moveTo(x - w / 2, top)
+      ctx.lineTo(x - w / 2, top - 4)
+      ctx.lineTo(x - w / 4, top - 1)
+      ctx.lineTo(x, top - 9)
+      ctx.lineTo(x + w / 4, top - 1)
+      ctx.lineTo(x + w / 2, top - 4)
+      ctx.lineTo(x + w / 2, top)
+      ctx.closePath()
+      ctx.fill()
+      break
+    }
+    case 'pontkat': {
+      // driehoekige oren
+      const ey = hy - r + 4
+      tri(ctx, x - r * 0.75, ey, x - r * 0.3, ey - 10, x - r * 0.1, ey)
+      tri(ctx, x + r * 0.75, ey, x + r * 0.3, ey - 10, x + r * 0.1, ey)
+      break
+    }
+    case 'toerist': {
+      // zonnehoedje met brede rand
+      ctx.fillStyle = '#F4C20D'
+      ctx.beginPath()
+      ctx.ellipse(x, hy - r + 6, r + 5, 4, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = skin.capColor
+      ctx.beginPath()
+      ctx.arc(x, hy - r + 6, r - 3, Math.PI, 0)
+      ctx.fill()
+      break
+    }
+    default: {
+      // pet met klep (Kapitein Pim, GVB-conducteur)
+      ctx.beginPath()
+      ctx.arc(x, hy - 3, r, Math.PI, 0)
+      ctx.fill()
+      ctx.fillRect(x - r - 3, hy - 3, (r + 3) * 2, 4)
+    }
+  }
+
   // oogjes
   ctx.fillStyle = '#1B2A33'
   ctx.beginPath()
-  ctx.arc(x - 5, y - 4, 1.8, 0, Math.PI * 2)
-  ctx.arc(x + 5, y - 4, 1.8, 0, Math.PI * 2)
+  ctx.arc(x - 5, hy + 2, 1.8, 0, Math.PI * 2)
+  ctx.arc(x + 5, hy + 2, 1.8, 0, Math.PI * 2)
   ctx.fill()
+
+  if (isCat) {
+    // roze neusje + snorharen
+    ctx.fillStyle = '#E8909A'
+    ctx.beginPath()
+    ctx.arc(x, hy + 6, 1.6, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(x - 3, hy + 6)
+    ctx.lineTo(x - 11, hy + 4)
+    ctx.moveTo(x + 3, hy + 6)
+    ctx.lineTo(x + 11, hy + 4)
+    ctx.stroke()
+  }
+
+  if (skin.kind === 'toerist') {
+    // camera voor het lijf
+    const cy = y + 5
+    ctx.fillStyle = '#222'
+    rr(ctx, x - 8, cy, 16, 10, 2)
+    ctx.fill()
+    ctx.fillStyle = '#9CD6F0'
+    ctx.beginPath()
+    ctx.arc(x, cy + 5, 3.2, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(x + 4, cy - 2, 4, 2)
+  }
 }
 
 function drawIdleHint(ctx: CanvasRenderingContext2D, width: number, height: number) {

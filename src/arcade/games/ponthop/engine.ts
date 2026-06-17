@@ -80,7 +80,7 @@ const IDLE_NUDGE = 11 // px/s waarmee de camera oprukt als je beweegt (mild)
 const IDLE_GRACE = 4 // s stilstand voordat de nudge inzet
 const HIT_FORGIVE = 5 // kleinere hitbox: net-misser met een boot telt niet als raak
 const CAMERA_LERP = 7
-const PLAYER_ANCHOR = 0.38 // speler zit 38% van onderaf in beeld
+const PLAYER_ANCHOR = 0.28 // speler zit 28% van onderaf: minder dode ruimte, meer zicht vooruit
 
 // ---- RNG (mulberry32, deterministisch) ------------------------------------
 

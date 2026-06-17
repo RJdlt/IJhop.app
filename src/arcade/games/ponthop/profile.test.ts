@@ -15,20 +15,20 @@ import {
 const base: Profile = { wallet: 0, totalCrossings: 0, bought: [], selected: 'pim' }
 
 describe('beloning', () => {
-  it('telt munten plus afstand-bonus', () => {
-    expect(runReward({ crossings: 10, coins: 4 })).toBe(14)
+  it('telt munten plus een bescheiden afstand-bonus', () => {
+    expect(runReward({ crossings: 10, coins: 4 })).toBe(9) // 4 + floor(10/2)
   })
 
   it('schrijft bonus en overstekens bij in de spaarpot', () => {
     const p = applyRunResult(base, { crossings: 10, coins: 4 })
-    expect(p.wallet).toBe(14)
+    expect(p.wallet).toBe(9)
     expect(p.totalCrossings).toBe(10)
   })
 })
 
 describe('vrijspelen', () => {
-  const tourist = characterById('toerist') // mijlpaal: 8 overstekens
-  const cyclist = characterById('wielrenner') // shop: 25
+  const tourist = characterById('toerist') // mijlpaal: 30 overstekens
+  const cyclist = characterById('wielrenner') // shop: 150
 
   it('gratis poppetje is altijd vrij', () => {
     expect(isUnlocked(base, CHARACTERS[0])).toBe(true)
@@ -36,19 +36,19 @@ describe('vrijspelen', () => {
 
   it('mijlpaal opent vanzelf bij genoeg overstekens', () => {
     expect(isUnlocked(base, tourist)).toBe(false)
-    expect(isUnlocked({ ...base, totalCrossings: 8 }, tourist)).toBe(true)
+    expect(isUnlocked({ ...base, totalCrossings: 30 }, tourist)).toBe(true)
   })
 
   it('koopt een shop-poppetje en trekt de prijs af', () => {
-    const rich = { ...base, wallet: 30 }
+    const rich = { ...base, wallet: 200 }
     const after = buyCharacter(rich, 'wielrenner')
-    expect(after.wallet).toBe(5)
+    expect(after.wallet).toBe(50) // 200 - 150
     expect(after.bought).toContain('wielrenner')
     expect(after.selected).toBe('wielrenner')
   })
 
   it('koopt niet zonder genoeg stroopwafels', () => {
-    const poor = { ...base, wallet: 10 }
+    const poor = { ...base, wallet: 50 }
     expect(buyCharacter(poor, 'wielrenner')).toEqual(poor)
   })
 

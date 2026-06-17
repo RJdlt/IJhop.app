@@ -31,16 +31,27 @@ export interface Board {
   you?: { rank: number; score: number; name: string }
 }
 
-/** Zorgt voor een (anonieme) sessie en geeft het user-id terug. */
+/** Zorgt voor een (anonieme) sessie en geeft het user-id terug. Faalt niet hard. */
 async function ensureSession(): Promise<string | null> {
   const client = supabase
   if (!client) return null
-  const {
-    data: { session },
-  } = await client.auth.getSession()
-  if (session?.user) return session.user.id
-  const { data } = await client.auth.signInAnonymously()
-  return data.user?.id ?? null
+  try {
+    const {
+      data: { session },
+    } = await client.auth.getSession()
+    if (session?.user) return session.user.id
+    const { data } = await client.auth.signInAnonymously()
+    return data.user?.id ?? null
+  } catch (e) {
+    console.warn('Anonieme sessie mislukt:', e)
+    return null
+  }
+}
+
+/** Laatste insturen-fout (voor een subtiele statusmelding in de UI). */
+let lastSubmitError: string | null = null
+export function getLastSubmitError(): string | null {
+  return lastSubmitError
 }
 
 /** Stuurt een afgeronde score in. Met `room` telt 'ie ook in die overtocht-lijst
@@ -52,9 +63,13 @@ export async function submitScore(
   room?: string | null,
 ): Promise<void> {
   const client = supabase
-  if (!client || score <= 0) return
-  try {
-    const userId = await ensureSession()
+  if (!client) {
+    lastSubmitError = 'Supabase niet geconfigureerd'
+    return
+  }
+  if (score <= 0) return
+
+  const makeRow = (userId: string | null) => {
     const row: Record<string, unknown> = {
       game_id: gameId,
       name: sanitizeName(name),
@@ -64,8 +79,28 @@ export async function submitScore(
     // `room` alleen meesturen als die er is — zo blijft insturen werken ook als
     // migratie 0002 (de room-kolom) nog niet gedraaid is.
     if (room) row.room = room
-    await client.from(TABLE).insert(row)
+    return row
+  }
+
+  try {
+    let userId = await ensureSession()
+    // BELANGRIJK: supabase-js gooit geen fout bij een RLS-weigering, maar geeft
+    // `{ error }` terug — die moeten we expliciet checken.
+    let { error } = await client.from(TABLE).insert(makeRow(userId))
+    if (error) {
+      // Waarschijnlijk geen/verlopen sessie: forceer een verse login en 1× retry.
+      try {
+        const { data } = await client.auth.signInAnonymously()
+        userId = data.user?.id ?? userId
+      } catch {
+        /* anon-login niet beschikbaar */
+      }
+      error = (await client.from(TABLE).insert(makeRow(userId))).error
+    }
+    lastSubmitError = error ? error.message : null
+    if (error) console.warn('Score insturen mislukt:', error)
   } catch (e) {
+    lastSubmitError = e instanceof Error ? e.message : String(e)
     console.warn('Score insturen mislukt:', e)
   }
 }

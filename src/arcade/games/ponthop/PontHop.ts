@@ -28,7 +28,7 @@ export function createPontHop(): GameModule {
   let raf = 0
   let lastT = 0
   let lastScore = 0
-  let skin: Skin = { capColor: '#F08A24', bodyColor: '#15616D' }
+  let skin: Skin = { kind: 'pim', capColor: '#F08A24', bodyColor: '#15616D' }
   const sfx = new Sfx()
 
   const frame = (now: number) => {
@@ -74,7 +74,7 @@ export function createPontHop(): GameModule {
     if (!opts) return
     // Lees het gekozen poppetje vers in, zodat een shop-keuze meteen meegaat.
     const character = characterById(loadProfile().selected)
-    skin = { capColor: character.capColor, bodyColor: character.bodyColor }
+    skin = { kind: character.id, capColor: character.capColor, bodyColor: character.bodyColor }
     world = createWorld({ width: opts.width, height: opts.height, seed: (Date.now() & 0xffffffff) >>> 0 })
     lastScore = 0
     lastT = 0
