@@ -33,6 +33,9 @@ interface ArcadeShellProps {
   crossingLabel?: string
   /** Aantal spelers dat nu live op deze overtocht zit (presence). */
   crossingPlayers?: number
+  /** 'page' = stroomt als normale pagina-inhoud (tab); 'fill' = vult vaste
+   *  hoogte met intern scrollend menu (snack-overlay). */
+  layout?: 'page' | 'fill'
   /** Toont in de pauze-sluier een knop om de pauze te negeren. */
   onDismissPause?: () => void
   dismissLabel?: string
@@ -50,6 +53,7 @@ export function ArcadeShell({
   crossingRoom,
   crossingLabel,
   crossingPlayers,
+  layout = 'fill',
   onDismissPause,
   dismissLabel,
 }: ArcadeShellProps) {
@@ -277,12 +281,28 @@ export function ArcadeShell({
     />
   ) : null
 
-  return (
-    <div ref={wrapRef} className="relative h-full w-full overflow-hidden rounded-3xl bg-brand-dark">
-      <canvas ref={canvasRef} className="block h-full w-full touch-none" />
+  const pageMode = layout === 'page'
+  // Spelletjes-tab ('page'): menu/over stromen als gewone pagina-inhoud, alleen
+  // tijdens het spelen een vast groot speelveld. Snack-overlay ('fill'): vaste
+  // hoogte met intern scrollend menu.
+  const rootClass = `relative w-full overflow-hidden rounded-3xl bg-brand-dark ${
+    pageMode ? (screen === 'playing' ? 'h-[78dvh] min-h-[420px]' : '') : 'h-full'
+  }`
+  const panelBase =
+    'flex w-full flex-col items-center gap-5 bg-brand-dark px-6 py-8 text-center text-white'
+  const menuClass = pageMode
+    ? `relative ${panelBase}`
+    : `absolute inset-0 justify-start overflow-y-auto ${panelBase}`
+  const overClass = pageMode
+    ? 'relative flex w-full flex-col items-center gap-4 bg-brand-dark p-6 text-center text-white'
+    : 'absolute inset-0 flex flex-col items-center justify-center gap-4 bg-brand-dark/85 p-6 text-center text-white backdrop-blur-sm'
 
-      {/* Topbalk: altijd zichtbaar tijdens spelen */}
-      {screen !== 'menu' && (
+  return (
+    <div ref={wrapRef} className={rootClass}>
+      <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full touch-none" />
+
+      {/* Topbalk: in-game HUD (score, geluid, sluiten) */}
+      {screen === 'playing' && (
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3">
           <span className="pointer-events-auto rounded-full bg-black/30 px-3 py-1 text-sm font-semibold tabular-nums text-white backdrop-blur">
             {t.arcade.score}: {score}
@@ -319,7 +339,7 @@ export function ArcadeShell({
 
       {/* Menu (dekkende achtergrond zodat geen game-frame doorschemert) */}
       {screen === 'menu' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-start gap-5 overflow-y-auto bg-brand-dark px-6 py-8 text-center text-white">
+        <div className={menuClass}>
           <div>
             <p className="text-2xl font-bold">{t.arcade.title}</p>
             <p className="mt-1 text-sm text-white/70">{t.arcade.pickGame}</p>
@@ -332,15 +352,19 @@ export function ArcadeShell({
                 key={g.id}
                 type="button"
                 onClick={() => startGame(g.id)}
-                className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 text-left transition hover:bg-white/20"
+                aria-label={`${t.arcade.play} ${g.title[lang]}`}
+                className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3.5 text-left ring-1 ring-white/10 transition hover:bg-white/15 active:scale-[0.99]"
               >
-                <span className="text-2xl">{g.emoji}</span>
-                <span className="flex-1">
-                  <span className="block font-semibold">{g.title[lang]}</span>
-                  <span className="block text-xs text-white/70">{g.tagline[lang]}</span>
+                <span className="text-3xl">{g.emoji}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-bold leading-tight">{g.title[lang]}</span>
+                  <span className="block truncate text-xs text-white/70">{g.tagline[lang]}</span>
+                  <span className="mt-0.5 block text-[11px] text-white/50">
+                    {t.arcade.best} {getHighScore(g.id)}
+                  </span>
                 </span>
-                <span className="text-xs text-white/70">
-                  {t.arcade.best} {getHighScore(g.id)}
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand px-3.5 py-2 text-sm font-bold text-white shadow-lg">
+                  ▶ {t.arcade.play}
                 </span>
               </button>
             ))}
@@ -380,7 +404,7 @@ export function ArcadeShell({
 
       {/* Game-over */}
       {screen === 'over' && result && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-brand-dark/85 p-6 text-center text-white backdrop-blur-sm">
+        <div className={overClass}>
           <p className="text-3xl">💦</p>
           <p className="text-2xl font-extrabold">{t.arcade.gameOver}</p>
           <p className="-mt-2 text-sm text-white/70">{t.arcade.drownTagline}</p>

@@ -6,6 +6,7 @@ import type { LineId, StopId } from '../types'
 export interface FerryOption {
   key: string
   line: LineId
+  from: StopId
   to: StopId
   secondsUntil?: number
 }
@@ -47,9 +48,12 @@ export function FerryPicker({ options, value, onChange }: FerryPickerProps) {
               >
                 {o.line}
               </span>
-              <span className="flex-1 leading-tight">
+              <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate text-xs font-semibold text-white">
-                  {t.stopNames[o.to]}
+                  → {t.stopNames[o.to]}
+                </span>
+                <span className="block truncate text-[11px] text-white/60">
+                  {t.from} {t.stopNames[o.from]}
                 </span>
                 <span className="block tabular-nums text-[11px] text-white/70">
                   {o.secondsUntil != null ? clockCountdown(o.secondsUntil) : '–'}

@@ -77,6 +77,7 @@ export default function App() {
       CONNECTIONS.map((c) => ({
         key: connKey(c),
         line: c.line,
+        from: c.from,
         to: c.to,
         secondsUntil: nextDepartures({ from: c.from, to: c.to, nowSecondOfWeek, limit: 1 })[0]
           ?.secondsUntil,
@@ -169,17 +170,16 @@ export default function App() {
           </main>
         ) : (
           <main className="flex flex-1 flex-col">
-            {/* Concrete dvh-hoogte i.p.v. een height:100%-keten, die iOS Safari
-                niet betrouwbaar doorrekent — zo wordt het speelveld groot. */}
-            <div className="h-[78dvh] min-h-[420px] w-full">
-              <ArcadeShell
-                menuExtra={ferryPicker}
-                banner={ferryBanner}
-                crossingRoom={crossingRoom}
-                crossingLabel={crossingLabel}
-                crossingPlayers={crossingPlayers}
-              />
-            </div>
+            {/* 'page': het menu stroomt als gewone pagina-inhoud (de pagina
+                scrollt, geen vakje-scroll). Alleen tijdens spelen een vast veld. */}
+            <ArcadeShell
+              layout="page"
+              menuExtra={ferryPicker}
+              banner={ferryBanner}
+              crossingRoom={crossingRoom}
+              crossingLabel={crossingLabel}
+              crossingPlayers={crossingPlayers}
+            />
           </main>
         )}
 
