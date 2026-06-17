@@ -335,6 +335,13 @@ export function Admin() {
     if (!supabase || !email) return
     setAuthBusy(true)
     setAuthMsg(null)
+    // Alleen toegestane adressen (admin of openstaande uitnodiging) krijgen een link.
+    const { data: allowed } = await supabase.rpc('email_allowed_for_admin', { p_email: email })
+    if (allowed !== true) {
+      setAuthMsg('Dit e-mailadres heeft geen toegang tot het dashboard.')
+      setAuthBusy(false)
+      return
+    }
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/admin` },
