@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="navy-grad" cx="50%" cy="35%" r="75%">
+      <stop offset="0%" stop-color="#1F3556"/>
+      <stop offset="100%" stop-color="#091422"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#navy-grad)"/>
+  <path d="M 128 145 L 180 145 L 193 198 L 206 145 L 258 145 L 193 412 Z" fill="#F5F2EA"/>
+  <path d="M 284 145 L 348 145 L 348 340 L 412 340 L 412 412 L 284 412 Z" fill="#A8842B"/>
+</svg>
