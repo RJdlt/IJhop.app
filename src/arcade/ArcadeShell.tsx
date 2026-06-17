@@ -11,10 +11,8 @@ import { getNickname, setNickname, NICK_MAX } from '../lib/nickname'
 import { hasProfanity, sanitizeName } from '../lib/profanity'
 import { track } from '../lib/analytics'
 import { PrizeEntry } from './PrizeEntry'
+import { shouldOfferPrize, markPrizeSeen } from '../lib/prize'
 import { SponsorCard } from '../components/SponsorCard'
-
-// Vanaf deze score tonen we de optionele prijzen-inzending.
-const PRIZE_MIN_SCORE = 20
 import type { GameInitOpts, GameModule, GameOverLine } from './types'
 
 // Eén spel voor nu; de ranglijst draait op dit spel-id.
@@ -78,6 +76,7 @@ export function ArcadeShell({
     high: number
     isRecord: boolean
     lines: GameOverLine[]
+    offerPrize: boolean
   } | null>(null)
   const [nick, setNick] = useState(() => getNickname())
   const nickRef = useRef(nick)
@@ -182,7 +181,11 @@ export function ArcadeShell({
         onGameOver: (s, lines) => {
           const { high, isRecord } = recordScore(id, s)
           detachInput()
-          setResult({ score: s, high, isRecord, lines: lines ?? [] })
+          // Beslis één keer of we de prijs-uitnodiging tonen (stabiel voor dit
+          // scherm) en onthoud dat 'ie getoond is, zodat 'ie niet blijft komen.
+          const offerPrize = shouldOfferPrize(s)
+          if (offerPrize) markPrizeSeen()
+          setResult({ score: s, high, isRecord, lines: lines ?? [], offerPrize })
           setScreen('over')
           track('game_over', { game: id, score: s, isRecord })
           // Score insturen (ook getagd met de overtocht) en lijsten verversen.
@@ -437,7 +440,7 @@ export function ArcadeShell({
             {t.arcade.addedAs}{' '}
             <span className="font-semibold text-white">{sanitizeName(nick)}</span>
           </p>
-          {result.score >= PRIZE_MIN_SCORE && <PrizeEntry gameId="ponthop" score={result.score} />}
+          {result.offerPrize && <PrizeEntry gameId="ponthop" score={result.score} />}
           {crossingBoard}
           {leaderboard}
           <div className="flex w-full max-w-xs flex-col gap-2">

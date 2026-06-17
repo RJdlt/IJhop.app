@@ -27,7 +27,7 @@ interface Retention { users: number; returning_users: number; returning_rate: nu
 interface RecentEvent { name: string; props: Record<string, unknown> | null; path: string | null; created_at: string }
 interface AdminRow { user_id: string; email: string | null; created_at: string }
 interface InviteRow { id: string; email: string; status: string; expires_at: string; used_at: string | null; created_at: string }
-interface EntryRow { id: string; game_id: string; score: number; email: string; created_at: string }
+interface EntryRow { id: string; game_id: string; score: number; name: string | null; email: string; created_at: string }
 type Bar = { label: string; value: number }
 
 // ---- Helpers ---------------------------------------------------------------
@@ -219,8 +219,9 @@ function makeDemo(days: number) {
     return { name: n, props, path: '/', created_at: new Date(Date.now() - i * rnd(20, 300) * 1000).toISOString() }
   })
   const retention: Retention = { users: 640, returning_users: 243, returning_rate: 38, new_today: 22, returning_today: 16, dau: 38, mau: 640 }
+  const dn = ['Sven', 'Lisa', 'Pim', 'Noa', 'Daan', 'Eva', 'Tim', 'Fleur']
   const entries: EntryRow[] = Array.from({ length: 8 }, (_, i) => ({
-    id: String(i), game_id: 'ponthop', score: rnd(20, 130), email: `speler${i}@voorbeeld.nl`,
+    id: String(i), game_id: 'ponthop', score: rnd(20, 130), name: dn[i], email: `speler${i}@voorbeeld.nl`,
     created_at: new Date(Date.now() - i * 3_600_000 * rnd(1, 40)).toISOString(),
   }))
   return { overview, live: 6, byName, daily, hourly, dow, funnel, recent, tabs, ferries, chars, devices, retention, entries }
@@ -388,9 +389,10 @@ export function Admin() {
   }
 
   const exportCsv = () => {
-    const head = 'datum,score,email,spel\n'
+    const csv = (s: string) => `"${(s ?? '').replace(/"/g, '""')}"`
+    const head = 'datum,naam,score,email,spel\n'
     const body = entries
-      .map((e) => `${new Date(e.created_at).toISOString()},${e.score},"${e.email.replace(/"/g, '""')}",${e.game_id}`)
+      .map((e) => `${new Date(e.created_at).toISOString()},${csv(e.name ?? '')},${e.score},${csv(e.email)},${e.game_id}`)
       .join('\n')
     const blob = new Blob([head + body], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -665,6 +667,7 @@ export function Admin() {
                 <thead>
                   <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
                     <th className="py-1 font-semibold">Datum</th>
+                    <th className="font-semibold">Naam</th>
                     <th className="font-semibold">Score</th>
                     <th className="font-semibold">E-mail</th>
                   </tr>
@@ -673,6 +676,7 @@ export function Admin() {
                   {entries.map((e) => (
                     <tr key={e.id} className="border-t border-slate-100">
                       <td className="py-1.5 text-slate-500">{new Date(e.created_at).toLocaleDateString('nl-NL')}</td>
+                      <td className="truncate text-slate-700">{e.name ?? '—'}</td>
                       <td className="font-semibold tabular-nums text-slate-800">{e.score}</td>
                       <td className="truncate text-slate-700">{e.email}</td>
                     </tr>
