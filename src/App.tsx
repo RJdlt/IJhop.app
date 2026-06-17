@@ -144,14 +144,8 @@ export default function App() {
   )
 
   return (
-    <div
-      className={`water-bg flex flex-col ${
-        // Spelletjes-tab: vaste schermhoogte (svh = stabiel, geen adresbalk-
-        // gespring) en geen pagina-scroll; alleen het menu scrollt intern.
-        view === 'arcade' ? 'h-[100svh] overflow-hidden' : 'min-h-full'
-      }`}
-    >
-      <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col gap-5 px-4 py-6">
+    <div className="water-bg flex min-h-full flex-col">
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-6">
         <Header />
 
         {view === 'ferries' ? (
@@ -174,10 +168,10 @@ export default function App() {
             <InstallPrompt />
           </main>
         ) : (
-          <main className="flex min-h-0 flex-1 flex-col">
-            {/* Vult de ruimte tussen header en tabbalk; alleen het menu hierin
-                scrollt, de pagina zelf niet (geen dubbele scroll/gespring). */}
-            <div className="min-h-0 w-full flex-1">
+          <main className="flex flex-1 flex-col">
+            {/* Concrete dvh-hoogte i.p.v. een height:100%-keten, die iOS Safari
+                niet betrouwbaar doorrekent — zo wordt het speelveld groot. */}
+            <div className="h-[78dvh] min-h-[420px] w-full">
               <ArcadeShell
                 menuExtra={ferryPicker}
                 banner={ferryBanner}
