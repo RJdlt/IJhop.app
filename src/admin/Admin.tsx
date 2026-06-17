@@ -40,6 +40,19 @@ interface RecentEvent {
   path: string | null
   created_at: string
 }
+interface AdminRow {
+  user_id: string
+  email: string | null
+  created_at: string
+}
+interface InviteRow {
+  id: string
+  email: string
+  status: string
+  expires_at: string
+  used_at: string | null
+  created_at: string
+}
 
 // ---- Helpers ---------------------------------------------------------------
 const EVENT_META: Record<string, { emoji: string; label: string }> = {
@@ -185,6 +198,13 @@ export function Admin() {
   const [chars, setChars] = useState<{ label: string; value: number }[]>([])
   const [devices, setDevices] = useState<{ label: string; value: number }[]>([])
 
+  // Toegangsbeheer
+  const [admins, setAdmins] = useState<AdminRow[]>([])
+  const [invites, setInvites] = useState<InviteRow[]>([])
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [newInvite, setNewInvite] = useState<{ code: string; email: string; link: string } | null>(null)
+  const [mgmtMsg, setMgmtMsg] = useState<string | null>(null)
+
   // Login
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -259,8 +279,44 @@ export function Admin() {
         value: r.count,
       })),
     )
+    const [ad, iv] = await Promise.all([
+      supabase.rpc('admin_list_admins'),
+      supabase.rpc('admin_list_invites'),
+    ])
+    setAdmins(list<AdminRow>(ad.data))
+    setInvites(list<InviteRow>(iv.data))
     setLoading(false)
   }, [days])
+
+  const createInvite = async () => {
+    if (!supabase || !inviteEmail) return
+    setMgmtMsg(null)
+    const { data, error } = await supabase.rpc('create_admin_invite', { p_email: inviteEmail })
+    if (error) {
+      setMgmtMsg(error.message)
+      return
+    }
+    const d = data as { code: string; email: string }
+    setNewInvite({
+      code: d.code,
+      email: d.email,
+      link: `${window.location.origin}/admin/join?code=${d.code}&email=${encodeURIComponent(d.email)}`,
+    })
+    setInviteEmail('')
+    loadAll()
+  }
+  const revokeInvite = async (id: string) => {
+    if (!supabase) return
+    await supabase.rpc('revoke_admin_invite', { p_id: id })
+    loadAll()
+  }
+  const removeAdmin = async (uid: string) => {
+    if (!supabase) return
+    setMgmtMsg(null)
+    const { error } = await supabase.rpc('remove_admin', { p_user_id: uid })
+    if (error) setMgmtMsg(error.message)
+    loadAll()
+  }
 
   useEffect(() => {
     if (isAdmin) loadAll()
@@ -495,6 +551,70 @@ export function Admin() {
                 <span className="shrink-0 text-xs tabular-nums text-slate-400">{ago(e.created_at)}</span>
               </div>
             ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="mt-4">
+        <Panel title="Toegang & uitnodigingen" emoji="🔑">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="email"
+              placeholder="e-mail van nieuwe admin"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-400"
+            />
+            <button type="button" disabled={!inviteEmail} onClick={createInvite} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">
+              ✉️ Maak uitnodiging
+            </button>
+          </div>
+          {mgmtMsg && <p className="mt-2 text-xs text-rose-600">{mgmtMsg}</p>}
+          {newInvite && (
+            <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm ring-1 ring-emerald-100">
+              <p className="text-slate-700">
+                Uitnodiging voor <strong>{newInvite.email}</strong> — geldig 7 dagen, 1× te gebruiken.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <span className="rounded-lg bg-white px-2 py-1 font-mono text-base font-bold tracking-[0.3em] text-emerald-700 ring-1 ring-emerald-200">{newInvite.code}</span>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(newInvite.code)} className="rounded-lg bg-white px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">Kopieer code</button>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(newInvite.link)} className="rounded-lg bg-white px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">Kopieer link</button>
+              </div>
+              <p className="mt-1 truncate text-xs text-slate-400">{newInvite.link}</p>
+            </div>
+          )}
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Uitnodigingen</p>
+              <div className="flex flex-col gap-1">
+                {invites.length === 0 && <p className="text-xs text-slate-400">Nog geen uitnodigingen.</p>}
+                {invites.map((iv) => (
+                  <div key={iv.id} className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-sm">
+                    <span className="flex-1 truncate text-slate-700">{iv.email}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${iv.status === 'open' ? 'bg-emerald-100 text-emerald-700' : iv.status === 'gebruikt' ? 'bg-slate-200 text-slate-600' : 'bg-amber-100 text-amber-700'}`}>{iv.status}</span>
+                    {iv.status === 'open' && (
+                      <button type="button" onClick={() => revokeInvite(iv.id)} className="text-xs font-semibold text-rose-600">Intrekken</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Admins</p>
+              <div className="flex flex-col gap-1">
+                {admins.map((a) => (
+                  <div key={a.user_id} className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-sm">
+                    <span className="flex-1 truncate text-slate-700">{a.email ?? a.user_id.slice(0, 8)}</span>
+                    {a.user_id === session.user.id ? (
+                      <span className="text-[10px] font-bold text-emerald-600">jij</span>
+                    ) : (
+                      <button type="button" onClick={() => removeAdmin(a.user_id)} className="text-xs font-semibold text-rose-600">Verwijderen</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </Panel>
       </div>
