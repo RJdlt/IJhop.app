@@ -39,6 +39,8 @@ export interface Strings {
   dataSource: string
   scheduleNote: string
   offlineReady: string
+  updateAvailable: string
+  refreshNow: string
   langName: string
   themeLight: string
   themeDark: string
@@ -135,6 +137,8 @@ export const STRINGS: Record<Lang, Strings> = {
     scheduleNote:
       'Tijden volgens de gepubliceerde dienstregeling. De aftelklok loopt live mee op Amsterdamse tijd.',
     offlineReady: 'Werkt offline',
+    updateAvailable: 'Nieuwe versie beschikbaar',
+    refreshNow: 'Verversen',
     langName: 'Nederlands',
     themeLight: 'Licht',
     themeDark: 'Donker',
@@ -232,6 +236,8 @@ export const STRINGS: Record<Lang, Strings> = {
     scheduleNote:
       'Times follow the published timetable. The countdown ticks live on Amsterdam time.',
     offlineReady: 'Works offline',
+    updateAvailable: 'New version available',
+    refreshNow: 'Refresh',
     langName: 'English',
     themeLight: 'Light',
     themeDark: 'Dark',

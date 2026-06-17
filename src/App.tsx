@@ -14,6 +14,7 @@ import { useAnonSession } from './hooks/useAnonSession'
 import { usePresence } from './hooks/usePresence'
 import { useHashView } from './hooks/useHashView'
 import { getNickname } from './lib/nickname'
+import { setupPwaAutoUpdate } from './pwa'
 import { useI18n } from './i18n/i18n'
 import { amsterdamMoment } from './lib/time'
 import { clockCountdown } from './lib/format'
@@ -53,6 +54,10 @@ export default function App() {
   const { userId } = useAnonSession()
   const [view, navigate] = useHashView()
   const [arcadeOpen, setArcadeOpen] = useState(false)
+
+  // Nieuwe versie beschikbaar? Toon een verversen-knop i.p.v. vanzelf herladen.
+  const [updateReady, setUpdateReady] = useState(false)
+  useEffect(() => setupPwaAutoUpdate(() => setUpdateReady(true)), [])
 
   const [flipped, setFlipped] = useState<Record<LineId, boolean>>({ F4: false, F7: false })
   const swap = (line: LineId) => setFlipped((f) => ({ ...f, [line]: !f[line] }))
@@ -213,6 +218,19 @@ export default function App() {
               onClose={() => setArcadeOpen(false)}
             />
           </div>
+        </div>
+      )}
+
+      {/* Niet-storende update-melding: één tik en je zit op de nieuwste versie. */}
+      {updateReady && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center px-4">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-xl ring-1 ring-black/10"
+          >
+            ⟳ {t.updateAvailable} · {t.refreshNow}
+          </button>
         </div>
       )}
     </div>
