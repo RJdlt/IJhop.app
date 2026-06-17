@@ -302,7 +302,7 @@ export function ArcadeShell({
 
       {/* Menu (dekkende achtergrond zodat geen game-frame doorschemert) */}
       {screen === 'menu' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 overflow-y-auto bg-brand-dark p-6 text-center text-white">
+        <div className="absolute inset-0 flex flex-col items-center justify-start gap-5 overflow-y-auto bg-brand-dark px-6 py-8 text-center text-white">
           <div>
             <p className="text-2xl font-bold">{t.arcade.title}</p>
             <p className="mt-1 text-sm text-white/70">{t.arcade.pickGame}</p>
