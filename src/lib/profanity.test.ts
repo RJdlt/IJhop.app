@@ -14,10 +14,8 @@ describe('sanitizeName', () => {
     expect(sanitizeName('   ')).toBe('Speler')
   })
 
-  it('maskeert grof taalgebruik maar houdt de naam bruikbaar', () => {
-    const out = sanitizeName('fuck jij')
-    expect(out).not.toContain('fuck')
-    expect(out.toLowerCase()).toContain('jij')
+  it('vervangt ongepaste namen door "Speler"', () => {
+    expect(sanitizeName('fuck jij')).toBe('Speler')
   })
 })
 
@@ -25,5 +23,12 @@ describe('hasProfanity', () => {
   it('herkent een scheldwoord', () => {
     expect(hasProfanity('vuile shit')).toBe(true)
     expect(hasProfanity('Vrolijke Reiger')).toBe(false)
+  })
+
+  it('vangt omzeilingen (leetspeak, spaties, herhalingen)', () => {
+    expect(hasProfanity('n1gger')).toBe(true)
+    expect(hasProfanity('f u c k')).toBe(true)
+    expect(hasProfanity('SHII7')).toBe(false) // geen valide woord, mag door
+    expect(hasProfanity('Dappere Schipper')).toBe(false)
   })
 })

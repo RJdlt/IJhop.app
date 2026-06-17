@@ -41,7 +41,8 @@ export function Leaderboard({ gameId, youName, reloadKey, room, title }: Leaderb
   const youInTop = board.you != null && board.you.rank <= board.rows.length
 
   return (
-    <div className="w-full max-w-xs text-left">
+    // min-hoogte zodat de lijst niet "springt" terwijl 'ie laadt/bijwerkt
+    <div className="min-h-[7.5rem] w-full max-w-xs text-left">
       <div className="mb-1.5 flex items-center justify-between gap-2">
         <p className="truncate text-xs font-semibold uppercase tracking-wide text-white/60">
           {title ?? `🏆 ${t.arcade.leaderboard}`}

@@ -1,46 +1,93 @@
 /**
- * Lichte naam-opschoning voor de publieke ranglijst: trimt, normaliseert
- * spaties, maximeert de lengte en maskeert een korte lijst grof taalgebruik.
- * Geen volledige moderatie — een fatsoensfilter dat de ergste dingen tegenhoudt.
+ * Naam-moderatie voor de publieke ranglijst. Houdt grof, seksistisch en
+ * racistisch taalgebruik tegen — ook simpele omzeilingen (leetspeak, spaties,
+ * herhalingen). Geen perfecte filter, maar vangt de bekende gevallen.
+ *
+ * Bewust streng: liever af en toe een onschuldige naam blokkeren dan een
+ * kwetsende naam op de lijst.
  */
 
+const LEET: Record<string, string> = {
+  '0': 'o',
+  '1': 'i',
+  '3': 'e',
+  '4': 'a',
+  '5': 's',
+  '7': 't',
+  '8': 'b',
+  '@': 'a',
+  $: 's',
+  '€': 'e',
+}
+
+/** Normaliseert naar pure letters, zodat omzeilingen alsnog matchen. */
+function normalize(raw: string): string {
+  return (raw ?? '')
+    .toLowerCase()
+    .replace(/[0134578@$€]/g, (c) => LEET[c] ?? c)
+    .replace(/[^a-z]/g, '') // strip spaties/leestekens: "f.u.c.k" -> "fuck"
+    .replace(/(.)\1{2,}/g, '$1$1') // "niiigger" -> "niigger"
+}
+
+// Genormaliseerde verboden fragmenten (racistisch, seksistisch, seksueel, grof).
 const BANNED = [
-  'kut',
+  // racistisch / haatdragend
+  'nigger',
+  'nigga',
+  'negro',
+  'nikker',
   'kanker',
-  'tering',
-  'tyfus',
+  'kkk',
+  'nazi',
+  'hitler',
+  'holocaust',
+  'pedo',
+  'rapist',
+  'verkracht',
+  // seksueel / seksistisch
   'hoer',
-  'lul',
-  'klootzak',
-  'neuk',
-  'fuck',
-  'shit',
+  'slet',
+  'whore',
   'bitch',
   'cunt',
-  'nigger',
-  'nazi',
+  'kut',
+  'pik',
+  'lul',
+  'penis',
+  'vagina',
+  'pussy',
   'dick',
+  'cock',
+  'neuk',
+  'fuck',
+  'fuk',
+  'fck',
+  'sex',
+  'seks',
+  'porn',
+  'dildo',
+  'tieten',
+  'reet',
+  'kontneuk',
+  'klootzak',
+  // grof
+  'shit',
+  'tyfus',
+  'tering',
   'asshole',
+  'bastard',
 ]
 
-const MAX = 24
-
-function mask(word: string): string {
-  return word[0] + '•'.repeat(Math.max(1, word.length - 1))
-}
-
-/** Geeft een nette weergavenaam terug; leeg/ongeldig → 'Speler'. */
-export function sanitizeName(raw: string): string {
-  let name = (raw ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX)
-  for (const bad of BANNED) {
-    const re = new RegExp(bad, 'gi')
-    name = name.replace(re, (m) => mask(m))
-  }
-  name = name.trim()
-  return name || 'Speler'
-}
-
-/** True als de naam (na opschoning) gemaskeerde delen bevat. */
+/** True als de naam (na normalisatie) een verboden fragment bevat. */
 export function hasProfanity(raw: string): boolean {
-  return BANNED.some((bad) => new RegExp(bad, 'i').test(raw ?? ''))
+  const n = normalize(raw)
+  return BANNED.some((bad) => n.includes(bad))
+}
+
+/** Geeft een nette weergavenaam terug; leeg of ongepast → 'Speler'. */
+export function sanitizeName(raw: string): string {
+  const name = (raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 24)
+  if (!name) return 'Speler'
+  if (hasProfanity(name)) return 'Speler'
+  return name
 }

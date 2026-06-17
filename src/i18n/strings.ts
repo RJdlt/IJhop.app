@@ -70,6 +70,8 @@ export interface Strings {
     ferryLeaves: string
     playAnyway: string
     yourName: string
+    nameRejected: string
+    addedAs: string
     save: string
     leaderboard: string
     noScoresYet: string
@@ -167,6 +169,8 @@ export const STRINGS: Record<Lang, Strings> = {
       ferryLeaves: 'vertrekt zo',
       playAnyway: 'Speel toch door',
       yourName: 'Jouw naam',
+      nameRejected: 'Kies een nette naam (geen scheldwoorden).',
+      addedAs: 'In de Toplijst als',
       save: 'Opslaan',
       leaderboard: 'Toplijst',
       noScoresYet: 'Nog geen scores — speel de eerste!',
@@ -262,6 +266,8 @@ export const STRINGS: Record<Lang, Strings> = {
       ferryLeaves: 'leaves soon',
       playAnyway: 'Keep playing',
       yourName: 'Your name',
+      nameRejected: 'Pick a friendly name (no slurs).',
+      addedAs: 'On the leaderboard as',
       save: 'Save',
       leaderboard: 'Leaderboard',
       noScoresYet: 'No scores yet — be the first!',

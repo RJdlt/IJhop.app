@@ -8,6 +8,7 @@ import { getHighScore, recordScore } from './scoreStore'
 import { submitScore } from './leaderboard'
 import { Leaderboard } from './Leaderboard'
 import { getNickname, setNickname, NICK_MAX } from '../lib/nickname'
+import { hasProfanity, sanitizeName } from '../lib/profanity'
 import type { GameInitOpts, GameModule, GameOverLine } from './types'
 
 // Eén spel voor nu; de ranglijst draait op dit spel-id.
@@ -76,7 +77,19 @@ export function ArcadeShell({
   crossingRef.current = crossingRoom
   // Bump om de ranglijst direct te verversen nadat onze eigen score binnen is.
   const [boardReload, setBoardReload] = useState(0)
+  const [nameError, setNameError] = useState(false)
+  const onNickChange = (v: string) => {
+    setNick(v)
+    if (nameError && !hasProfanity(v)) setNameError(false)
+  }
   const saveNick = () => {
+    if (hasProfanity(nick)) {
+      // Ongepaste naam niet bewaren: melden en terug naar de vorige naam.
+      setNameError(true)
+      setNick(getNickname())
+      return
+    }
+    setNameError(false)
     const clean = setNickname(nick)
     if (clean) setNick(clean)
   }
@@ -235,12 +248,16 @@ export function ArcadeShell({
       <input
         id="arcade-nick"
         value={nick}
-        onChange={(e) => setNick(e.target.value)}
+        onChange={(e) => onNickChange(e.target.value)}
         onBlur={saveNick}
         maxLength={NICK_MAX}
         placeholder={t.arcade.yourName}
-        className="mt-1 w-full rounded-xl bg-white/10 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40 focus:bg-white/15"
+        aria-invalid={nameError}
+        className={`mt-1 w-full rounded-xl bg-white/10 px-3 py-2 text-sm text-white outline-none placeholder:text-white/40 focus:bg-white/15 ${
+          nameError ? 'ring-1 ring-red-400' : ''
+        }`}
       />
+      {nameError && <p className="mt-1 text-[11px] text-red-300">{t.arcade.nameRejected}</p>}
     </div>
   )
 
@@ -384,6 +401,10 @@ export function ArcadeShell({
               ))}
             </div>
           )}
+          <p className="text-sm text-white/70">
+            {t.arcade.addedAs}{' '}
+            <span className="font-semibold text-white">{sanitizeName(nick)}</span>
+          </p>
           {crossingBoard}
           {leaderboard}
           <div className="flex w-full max-w-xs flex-col gap-2">
