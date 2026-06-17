@@ -190,6 +190,9 @@ export function Admin() {
   const [password, setPassword] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [authMsg, setAuthMsg] = useState<string | null>(null)
+  const [authMode, setAuthMode] = useState<'code' | 'password'>('code')
+  const [codeSent, setCodeSent] = useState(false)
+  const [code, setCode] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -281,6 +284,29 @@ export function Admin() {
     else if (mode === 'up') setAuthMsg('Account aangemaakt. Bevestig eventueel je e-mail en log daarna in.')
     setAuthBusy(false)
   }
+  const sendCode = async () => {
+    if (!supabase || !email) return
+    setAuthBusy(true)
+    setAuthMsg(null)
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: true },
+    })
+    if (error) setAuthMsg(error.message)
+    else {
+      setCodeSent(true)
+      setAuthMsg(`We hebben een inlogcode naar ${email} gestuurd. Vul 'm hieronder in.`)
+    }
+    setAuthBusy(false)
+  }
+  const verifyCode = async () => {
+    if (!supabase) return
+    setAuthBusy(true)
+    setAuthMsg(null)
+    const { error } = await supabase.auth.verifyOtp({ email, token: code.trim(), type: 'email' })
+    if (error) setAuthMsg(error.message)
+    setAuthBusy(false)
+  }
   const signOut = () => supabase?.auth.signOut()
 
   // ---- Render states ----
@@ -288,19 +314,60 @@ export function Admin() {
   if (checking) return <Shell><p className="text-slate-500">Laden…</p></Shell>
 
   if (!session) {
+    const inputCls =
+      'rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-400'
     return (
       <Shell>
         <h1 className="text-xl font-bold text-slate-900">🛟 IJhop Admin</h1>
-        <p className="mt-1 text-sm text-slate-500">Log in om het dashboard te zien.</p>
-        <div className="mt-4 flex flex-col gap-2">
-          <input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-400" />
-          <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-400" />
-          <div className="flex gap-2">
-            <button type="button" disabled={authBusy} onClick={() => signIn('in')} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">Inloggen</button>
-            <button type="button" disabled={authBusy} onClick={() => signIn('up')} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60">Account aanmaken</button>
-          </div>
-          {authMsg && <p className="text-xs text-amber-600">{authMsg}</p>}
+        <p className="mt-1 text-sm text-slate-500">Log in (of maak een account) om het dashboard te zien.</p>
+
+        <div className="mt-4 flex rounded-full bg-slate-100 p-0.5 text-xs font-semibold">
+          {(['code', 'password'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                setAuthMode(m)
+                setAuthMsg(null)
+                setCodeSent(false)
+              }}
+              className={`flex-1 rounded-full px-3 py-1.5 ${authMode === m ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
+            >
+              {m === 'code' ? '✉️ E-mailcode' : '🔑 Wachtwoord'}
+            </button>
+          ))}
         </div>
+
+        {authMode === 'code' ? (
+          <div className="mt-4 flex flex-col gap-2">
+            <input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
+            {!codeSent ? (
+              <button type="button" disabled={authBusy || !email} onClick={sendCode} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                {authBusy ? 'Versturen…' : 'Stuur inlogcode'}
+              </button>
+            ) : (
+              <>
+                <input inputMode="numeric" autoComplete="one-time-code" placeholder="6-cijferige code" value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} text-center text-lg tracking-[0.4em]`} />
+                <button type="button" disabled={authBusy || code.length < 6} onClick={verifyCode} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                  {authBusy ? 'Controleren…' : 'Inloggen'}
+                </button>
+                <button type="button" onClick={() => { setCodeSent(false); setCode(''); setAuthMsg(null) }} className="text-xs text-slate-400 underline-offset-2 hover:underline">
+                  Andere e-mail / opnieuw versturen
+                </button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-col gap-2">
+            <input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
+            <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} />
+            <div className="flex gap-2">
+              <button type="button" disabled={authBusy} onClick={() => signIn('in')} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">Inloggen</button>
+              <button type="button" disabled={authBusy} onClick={() => signIn('up')} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60">Account aanmaken</button>
+            </div>
+          </div>
+        )}
+        {authMsg && <p className="mt-2 text-xs text-amber-600">{authMsg}</p>}
       </Shell>
     )
   }
