@@ -174,8 +174,12 @@ export async function topScores(
 export function subscribeScores(gameId: string, onChange: () => void): () => void {
   const client = supabase
   if (!client) return () => {}
+  // Unieke kanaalnaam per abonnement: meerdere ranglijsten (globaal + overtocht)
+  // op hetzelfde scherm mogen niet hetzelfde kanaal delen, anders crasht het met
+  // "cannot add postgres_changes callbacks after subscribe()".
+  const uniq = Math.random().toString(36).slice(2)
   const channel = client
-    .channel(`scores:${gameId}`)
+    .channel(`scores:${gameId}:${uniq}`)
     .on(
       'postgres_changes',
       { event: 'INSERT', schema: 'public', table: TABLE, filter: `game_id=eq.${gameId}` },
