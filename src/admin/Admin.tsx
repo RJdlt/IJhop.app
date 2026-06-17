@@ -202,7 +202,7 @@ export function Admin() {
   const [admins, setAdmins] = useState<AdminRow[]>([])
   const [invites, setInvites] = useState<InviteRow[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
-  const [newInvite, setNewInvite] = useState<{ code: string; email: string; link: string } | null>(null)
+  const [newInvite, setNewInvite] = useState<{ email: string } | null>(null)
   const [mgmtMsg, setMgmtMsg] = useState<string | null>(null)
 
   // Login
@@ -210,9 +210,10 @@ export function Admin() {
   const [password, setPassword] = useState('')
   const [authBusy, setAuthBusy] = useState(false)
   const [authMsg, setAuthMsg] = useState<string | null>(null)
-  const [authMode, setAuthMode] = useState<'code' | 'password'>('code')
-  const [codeSent, setCodeSent] = useState(false)
-  const [code, setCode] = useState('')
+  const [authMode, setAuthMode] = useState<'link' | 'password'>('link')
+  const [linkSent, setLinkSent] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [pwMsg, setPwMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (!supabase) {
@@ -233,7 +234,13 @@ export function Admin() {
         return
       }
       const { data } = await supabase.rpc('is_admin')
-      setIsAdmin(data === true)
+      let ok = data === true
+      if (!ok) {
+        // Uitgenodigd e-mailadres? Dan automatisch toegang verlenen.
+        const claim = await supabase.rpc('claim_admin_access')
+        ok = claim.data === true
+      }
+      setIsAdmin(ok)
       setChecking(false)
     }
     check()
@@ -296,12 +303,8 @@ export function Admin() {
       setMgmtMsg(error.message)
       return
     }
-    const d = data as { code: string; email: string }
-    setNewInvite({
-      code: d.code,
-      email: d.email,
-      link: `${window.location.origin}/admin/join?code=${d.code}&email=${encodeURIComponent(d.email)}`,
-    })
+    const d = data as { email: string }
+    setNewInvite({ email: d.email })
     setInviteEmail('')
     loadAll()
   }
@@ -328,40 +331,35 @@ export function Admin() {
     return () => clearInterval(t)
   }, [isAdmin, auto, loadAll])
 
-  const signIn = async (mode: 'in' | 'up') => {
-    if (!supabase) return
-    setAuthBusy(true)
-    setAuthMsg(null)
-    const { error } =
-      mode === 'in'
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password })
-    if (error) setAuthMsg(error.message)
-    else if (mode === 'up') setAuthMsg('Account aangemaakt. Bevestig eventueel je e-mail en log daarna in.')
-    setAuthBusy(false)
-  }
-  const sendCode = async () => {
+  const sendLink = async () => {
     if (!supabase || !email) return
     setAuthBusy(true)
     setAuthMsg(null)
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },
+      options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/admin` },
     })
     if (error) setAuthMsg(error.message)
     else {
-      setCodeSent(true)
-      setAuthMsg(`We hebben een inlogcode naar ${email} gestuurd. Vul 'm hieronder in.`)
+      setLinkSent(true)
+      setAuthMsg(`We hebben een inloglink naar ${email} gestuurd. Open je mail en klik de link.`)
     }
     setAuthBusy(false)
   }
-  const verifyCode = async () => {
+  const signInPw = async () => {
     if (!supabase) return
     setAuthBusy(true)
     setAuthMsg(null)
-    const { error } = await supabase.auth.verifyOtp({ email, token: code.trim(), type: 'email' })
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) setAuthMsg(error.message)
     setAuthBusy(false)
+  }
+  const savePassword = async () => {
+    if (!supabase || newPassword.length < 6) return
+    setPwMsg(null)
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setPwMsg(error ? error.message : 'Wachtwoord opgeslagen — je kunt nu ook met wachtwoord inloggen.')
+    if (!error) setNewPassword('')
   }
   const signOut = () => supabase?.auth.signOut()
 
@@ -371,59 +369,52 @@ export function Admin() {
 
   if (!session) {
     const inputCls =
-      'rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-400'
+      'rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-400'
     return (
       <Shell>
-        <h1 className="text-xl font-bold text-slate-900">🛟 IJhop Admin</h1>
-        <p className="mt-1 text-sm text-slate-500">Log in (of maak een account) om het dashboard te zien.</p>
+        <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-100">
+          <h1 className="text-xl font-bold text-slate-900">🛟 IJhop Admin</h1>
+          <p className="mt-1 text-sm text-slate-500">Log in om het dashboard te zien.</p>
 
-        <div className="mt-4 flex rounded-full bg-slate-100 p-0.5 text-xs font-semibold">
-          {(['code', 'password'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => {
-                setAuthMode(m)
-                setAuthMsg(null)
-                setCodeSent(false)
-              }}
-              className={`flex-1 rounded-full px-3 py-1.5 ${authMode === m ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
-            >
-              {m === 'code' ? '✉️ E-mailcode' : '🔑 Wachtwoord'}
-            </button>
-          ))}
-        </div>
-
-        {authMode === 'code' ? (
-          <div className="mt-4 flex flex-col gap-2">
-            <input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
-            {!codeSent ? (
-              <button type="button" disabled={authBusy || !email} onClick={sendCode} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
-                {authBusy ? 'Versturen…' : 'Stuur inlogcode'}
+          <div className="mt-4 flex rounded-full bg-slate-100 p-0.5 text-xs font-semibold">
+            {(['link', 'password'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setAuthMode(m)
+                  setAuthMsg(null)
+                  setLinkSent(false)
+                }}
+                className={`flex-1 rounded-full px-3 py-1.5 ${authMode === m ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
+              >
+                {m === 'link' ? '✉️ Inloglink' : '🔑 Wachtwoord'}
               </button>
-            ) : (
-              <>
-                <input inputMode="numeric" autoComplete="one-time-code" placeholder="6-cijferige code" value={code} onChange={(e) => setCode(e.target.value)} className={`${inputCls} text-center text-lg tracking-[0.4em]`} />
-                <button type="button" disabled={authBusy || code.length < 6} onClick={verifyCode} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
-                  {authBusy ? 'Controleren…' : 'Inloggen'}
-                </button>
-                <button type="button" onClick={() => { setCodeSent(false); setCode(''); setAuthMsg(null) }} className="text-xs text-slate-400 underline-offset-2 hover:underline">
-                  Andere e-mail / opnieuw versturen
-                </button>
-              </>
-            )}
+            ))}
           </div>
-        ) : (
-          <div className="mt-4 flex flex-col gap-2">
-            <input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
-            <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} />
-            <div className="flex gap-2">
-              <button type="button" disabled={authBusy} onClick={() => signIn('in')} className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">Inloggen</button>
-              <button type="button" disabled={authBusy} onClick={() => signIn('up')} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60">Account aanmaken</button>
+
+          {authMode === 'link' ? (
+            <div className="mt-4 flex flex-col gap-2">
+              <input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
+              <button type="button" disabled={authBusy || !email || linkSent} onClick={sendLink} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+                {authBusy ? 'Versturen…' : linkSent ? '✓ Link verstuurd' : 'Stuur inloglink'}
+              </button>
+              {linkSent && (
+                <button type="button" onClick={() => { setLinkSent(false); setAuthMsg(null) }} className="text-xs text-slate-400 underline-offset-2 hover:underline">
+                  Opnieuw versturen / ander e-mailadres
+                </button>
+              )}
             </div>
-          </div>
-        )}
-        {authMsg && <p className="mt-2 text-xs text-amber-600">{authMsg}</p>}
+          ) : (
+            <div className="mt-4 flex flex-col gap-2">
+              <input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
+              <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} />
+              <button type="button" disabled={authBusy} onClick={signInPw} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">Inloggen</button>
+              <p className="text-[11px] text-slate-400">Nog geen wachtwoord? Log eerst in met de inloglink en stel daarna een wachtwoord in.</p>
+            </div>
+          )}
+          {authMsg && <p className="mt-2 text-xs text-amber-600">{authMsg}</p>}
+        </div>
       </Shell>
     )
   }
@@ -433,13 +424,23 @@ export function Admin() {
     const sql = `insert into public.admins(user_id) values ('${uid}');`
     return (
       <Shell>
-        <h1 className="text-xl font-bold text-slate-900">Bijna klaar</h1>
-        <p className="mt-1 text-sm text-slate-600">Ingelogd als <strong>{session.user.email}</strong>, maar nog geen admin. Draai deze SQL eenmalig en herlaad:</p>
-        <pre className="mt-3 overflow-x-auto rounded-xl bg-slate-900 p-3 text-xs text-slate-100">{sql}</pre>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" onClick={() => navigator.clipboard?.writeText(sql)} className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">Kopieer SQL</button>
-          <button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Ik heb het gedraaid — herlaad</button>
-          <button type="button" onClick={signOut} className="rounded-xl px-3 py-2 text-sm text-slate-500">Uitloggen</button>
+        <div className="rounded-3xl bg-white p-6 text-center shadow-sm ring-1 ring-slate-100">
+          <p className="text-4xl">🔒</p>
+          <h1 className="mt-2 text-xl font-bold text-slate-900">Nog geen toegang</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Je bent ingelogd als <strong>{session.user.email}</strong>, maar dit adres is nog niet
+            uitgenodigd. Vraag een beheerder je uit te nodigen — daarna ben je bij de volgende keer
+            inloggen automatisch admin.
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Opnieuw proberen</button>
+            <button type="button" onClick={signOut} className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">Uitloggen</button>
+          </div>
+          <details className="mt-4 text-left">
+            <summary className="cursor-pointer text-xs text-slate-400">Eerste admin van een nieuw project?</summary>
+            <p className="mt-2 text-xs text-slate-500">Draai eenmalig in de Supabase SQL-editor en herlaad:</p>
+            <pre className="mt-1 overflow-x-auto rounded-lg bg-slate-900 p-2 text-[11px] text-slate-100">{sql}</pre>
+          </details>
         </div>
       </Shell>
     )
@@ -563,24 +564,22 @@ export function Admin() {
               placeholder="e-mail van nieuwe admin"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
-              className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-400"
+              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-400"
             />
             <button type="button" disabled={!inviteEmail} onClick={createInvite} className="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">
-              ✉️ Maak uitnodiging
+              ✉️ Nodig uit
             </button>
           </div>
           {mgmtMsg && <p className="mt-2 text-xs text-rose-600">{mgmtMsg}</p>}
           {newInvite && (
             <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm ring-1 ring-emerald-100">
               <p className="text-slate-700">
-                Uitnodiging voor <strong>{newInvite.email}</strong> — geldig 7 dagen, 1× te gebruiken.
+                Uitnodiging klaar voor <strong>{newInvite.email}</strong> (7 dagen geldig).
               </p>
-              <div className="mt-2 flex items-center gap-2">
-                <span className="rounded-lg bg-white px-2 py-1 font-mono text-base font-bold tracking-[0.3em] text-emerald-700 ring-1 ring-emerald-200">{newInvite.code}</span>
-                <button type="button" onClick={() => navigator.clipboard?.writeText(newInvite.code)} className="rounded-lg bg-white px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">Kopieer code</button>
-                <button type="button" onClick={() => navigator.clipboard?.writeText(newInvite.link)} className="rounded-lg bg-white px-2 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">Kopieer link</button>
-              </div>
-              <p className="mt-1 truncate text-xs text-slate-400">{newInvite.link}</p>
+              <p className="mt-1 text-slate-600">
+                Laat ze naar <strong>{window.location.host}/admin</strong> gaan en inloggen met dit
+                e-mailadres (ze krijgen een inloglink in hun mail). Daarna zijn ze automatisch admin.
+              </p>
             </div>
           )}
 
@@ -615,6 +614,23 @@ export function Admin() {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div className="mt-4 border-t border-slate-100 pt-3">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">Jouw wachtwoord</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="password"
+                placeholder="nieuw wachtwoord (min. 6 tekens)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:border-emerald-400"
+              />
+              <button type="button" disabled={newPassword.length < 6} onClick={savePassword} className="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                Opslaan
+              </button>
+            </div>
+            {pwMsg && <p className="mt-1 text-xs text-slate-500">{pwMsg}</p>}
           </div>
         </Panel>
       </div>

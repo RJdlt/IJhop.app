@@ -5,19 +5,16 @@ import App from './App'
 import { I18nProvider } from './i18n/i18n'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Admin } from './admin/Admin'
-import { Join } from './admin/Join'
 
-// Eigen, afgeschermde routes; verder de gewone app.
+// Afgeschermd dashboard op /admin (ook /admin/join landt hier); verder de app.
 const path = window.location.pathname.replace(/\/+$/, '')
-const route = path === '/admin/join' ? 'join' : path === '/admin' ? 'admin' : 'app'
+const isAdminRoute = path === '/admin' || path === '/admin/join'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      {route === 'admin' ? (
+      {isAdminRoute ? (
         <Admin />
-      ) : route === 'join' ? (
-        <Join />
       ) : (
         <I18nProvider>
           <App />
