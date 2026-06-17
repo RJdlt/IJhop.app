@@ -23,6 +23,7 @@ interface Overview {
 interface NameCount { name: string; count: number }
 interface Daily { day: string; users: number; sessions: number; events: number }
 interface Funnel { sessions: number; snack: number; started: number; finished: number }
+interface Retention { users: number; returning_users: number; returning_rate: number; new_today: number; returning_today: number; dau: number; mau: number }
 interface RecentEvent { name: string; props: Record<string, unknown> | null; path: string | null; created_at: string }
 interface AdminRow { user_id: string; email: string | null; created_at: string }
 interface InviteRow { id: string; email: string; status: string; expires_at: string; used_at: string | null; created_at: string }
@@ -102,6 +103,15 @@ function Panel({ title, emoji, children }: { title: string; emoji: string; child
     </div>
   )
 }
+function MiniStat({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">{value}</p>
+      {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
+    </div>
+  )
+}
 function Empty({ text = 'Nog geen data — dit vult zich zodra mensen de app gebruiken.' }: { text?: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-1 py-6 text-center">
@@ -165,7 +175,13 @@ function makeDemo(days: number) {
   const daily: Daily[] = Array.from({ length: days }, (_, i) => {
     const d = new Date(today)
     d.setDate(d.getDate() - (days - 1 - i))
-    return { day: d.toISOString().slice(0, 10), users: rnd(8, 40), sessions: rnd(12, 60), events: rnd(120, 520) }
+    const isWeekend = ((d.getDay() + 6) % 7) >= 5
+    const growth = 1 + (i / Math.max(1, days - 1)) * 1.8 // loopt op over de tijd
+    const noise = 0.82 + Math.random() * 0.36
+    const events = Math.round(80 * growth * (isWeekend ? 1.35 : 1) * noise)
+    const sessions = Math.max(1, Math.round(events / rnd(7, 11)))
+    const users = Math.max(1, Math.round(sessions * (0.6 + Math.random() * 0.2)))
+    return { day: d.toISOString().slice(0, 10), users, sessions, events }
   })
   const hourly = Array.from({ length: 24 }, (_, h) =>
     (h >= 7 && h <= 9) || (h >= 16 && h <= 18) ? rnd(300, 600) : h >= 1 && h <= 5 ? rnd(2, 30) : rnd(60, 220),
@@ -201,7 +217,8 @@ function makeDemo(days: number) {
       n === 'character_select' ? { id: 'toerist' } : null
     return { name: n, props, path: '/', created_at: new Date(Date.now() - i * rnd(20, 300) * 1000).toISOString() }
   })
-  return { overview, live: 6, byName, daily, hourly, dow, funnel, recent, tabs, ferries, chars, devices }
+  const retention: Retention = { users: 640, returning_users: 243, returning_rate: 38, new_today: 22, returning_today: 16, dau: 38, mau: 640 }
+  return { overview, live: 6, byName, daily, hourly, dow, funnel, recent, tabs, ferries, chars, devices, retention }
 }
 
 // ---- Hoofdcomponent ---------------------------------------------------------
@@ -224,6 +241,7 @@ export function Admin() {
   const [hourly, setHourly] = useState<number[]>(Array(24).fill(0))
   const [dow, setDow] = useState<number[]>(Array(7).fill(0))
   const [funnel, setFunnel] = useState<Funnel | null>(null)
+  const [retention, setRetention] = useState<Retention | null>(null)
   const [recent, setRecent] = useState<RecentEvent[]>([])
   const [tabs, setTabs] = useState<NameCount[]>([])
   const [ferries, setFerries] = useState<Bar[]>([])
@@ -273,7 +291,7 @@ export function Admin() {
       const d = makeDemo(days)
       setOverview(d.overview); setLive(d.live); setByName(d.byName); setDaily(d.daily); setHourly(d.hourly)
       setDow(d.dow); setFunnel(d.funnel); setRecent(d.recent); setTabs(d.tabs); setFerries(d.ferries)
-      setChars(d.chars); setDevices(d.devices)
+      setChars(d.chars); setDevices(d.devices); setRetention(d.retention)
       setLastUpdated(new Date()); setFirstLoaded(true)
       return
     }
@@ -281,7 +299,7 @@ export function Admin() {
     setLoading(true)
     const num = (v: unknown) => (typeof v === 'number' ? v : 0)
     const list = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
-    const [ov, lv, bn, dl, hr, dw, fn, rc, tb, fr, ch, dv, ad, iv] = await Promise.all([
+    const [ov, lv, bn, dl, hr, dw, fn, rt, rc, tb, fr, ch, dv, ad, iv] = await Promise.all([
       supabase.rpc('analytics_overview'),
       supabase.rpc('analytics_live'),
       supabase.rpc('analytics_by_name', { days }),
@@ -289,6 +307,7 @@ export function Admin() {
       supabase.rpc('analytics_hourly', { days }),
       supabase.rpc('analytics_dow', { days }),
       supabase.rpc('analytics_funnel', { days }),
+      supabase.rpc('analytics_retention', { days }),
       supabase.rpc('analytics_recent', { lim: 40 }),
       supabase.rpc('analytics_prop', { p_name: 'tab_view', p_key: 'view', days }),
       supabase.rpc('analytics_prop', { p_name: 'ferry_pick', p_key: 'key', days }),
@@ -308,6 +327,7 @@ export function Admin() {
     list<{ dow: number; count: number }>(dw.data).forEach((r) => (d[r.dow - 1] = r.count))
     setDow(d)
     if (fn.data) setFunnel(fn.data as Funnel)
+    if (rt.data) setRetention(rt.data as Retention)
     setRecent(list<RecentEvent>(rc.data))
     setTabs(list<NameCount>(tb.data))
     setFerries(list<{ value: string; count: number }>(fr.data).map((r) => ({ label: r.value, value: r.count })))
@@ -524,6 +544,25 @@ export function Admin() {
             <Stat emoji="✨" label="Events" value={nf(overview?.events_total ?? 0)} sub={`${nf(overview?.events_today ?? 0)} vandaag`} accent="slate" />
             <Stat emoji="🎮" label="Spellen gespeeld" value={nf(overview?.game_overs ?? 0)} sub={`${nf(overview?.game_starts ?? 0)} gestart`} accent="rose" />
             <Stat emoji="🏆" label="Score gem. / hoogst" value={`${nf(overview?.avg_score ?? 0)} / ${nf(overview?.max_score ?? 0)}`} accent="brand" />
+          </div>
+
+          <div className="mt-4">
+            <Panel title="Retentie & terugkeer" emoji="🔁">
+              {!retention || retention.users === 0 ? <Empty /> : (
+                <>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <MiniStat label="Terugkerend" value={`${retention.returning_rate}%`} sub={`${nf(retention.returning_users)} v/d ${nf(retention.users)}`} />
+                    <MiniStat label="Nieuw vandaag" value={nf(retention.new_today)} />
+                    <MiniStat label="Terugkerend vandaag" value={nf(retention.returning_today)} />
+                    <MiniStat label="Stickiness" value={`${retention.mau ? Math.round((100 * retention.dau) / retention.mau) : 0}%`} sub={`DAU/MAU ${nf(retention.dau)}/${nf(retention.mau)}`} />
+                  </div>
+                  <div className="mt-3">
+                    <div className="mb-1 flex justify-between text-xs text-slate-500"><span>Aandeel terugkerende gebruikers ({days}d)</span><span>{retention.returning_rate}%</span></div>
+                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand" style={{ width: `${retention.returning_rate}%` }} /></div>
+                  </div>
+                </>
+              )}
+            </Panel>
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
