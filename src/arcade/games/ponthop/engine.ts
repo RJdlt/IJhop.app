@@ -64,6 +64,8 @@ export interface World {
   genTo: number
   rowsSincePier: number
   segTarget: number
+  /** Korte hop-animatie (1 -> 0) voor een vloeiend stuitertje na elke beweging. */
+  hopAnim: number
 }
 
 // ---- Afstemming (tunables) -------------------------------------------------
@@ -219,6 +221,7 @@ export function createWorld({ width, height, seed = 1 }: WorldOpts): World {
     genTo: 0,
     rowsSincePier: 0,
     segTarget: 3,
+    hopAnim: 0,
   }
   generateUpTo(w, GEN_AHEAD)
   w.cameraY = playerWorldY(w) - height * PLAYER_ANCHOR
@@ -275,6 +278,7 @@ export function worldHop(w: World, action: HopAction): void {
   if (w.over) return
   w.started = true
   w.idleFor = 0
+  w.hopAnim = 1 // start een kort stuitertje
 
   if (action === 'up' || action === 'tap') {
     w.player.row += 1
@@ -312,6 +316,7 @@ export function worldStep(w: World, dt: number): void {
   // Voorkom enorme sprongen na tab-switch.
   const step = Math.min(dt, 0.05)
   w.t += step
+  if (w.hopAnim > 0) w.hopAnim = Math.max(0, w.hopAnim - step / 0.13)
 
   const lane = w.lanes.get(w.player.row)
 

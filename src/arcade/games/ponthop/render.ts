@@ -65,9 +65,12 @@ export function render(
   const sy = (worldY: number) => height - (worldY - cameraY)
 
   ctx.clearRect(0, 0, width, height)
-  // Water-basis over het hele veld (zelfde kleur als de pont-banen), zodat de
-  // ruimte onder de startsteiger als doorlopend IJ oogt i.p.v. een leeg vlak.
-  ctx.fillStyle = WATER
+  // Water-basis met een zachte verloop voor diepte (lichter boven, donker onder),
+  // zodat de ruimte onder de startsteiger als doorlopend IJ oogt.
+  const wg = ctx.createLinearGradient(0, 0, 0, height)
+  wg.addColorStop(0, '#1AA0D8')
+  wg.addColorStop(1, WATER_DK)
+  ctx.fillStyle = wg
   ctx.fillRect(0, 0, width, height)
 
   const firstRow = Math.floor(cameraY / ROW_H) - 1
@@ -87,7 +90,9 @@ export function render(
     if (lane.coinX !== null && !lane.coinTaken) drawCoin(ctx, lane.coinX, bandTop + ROW_H / 2)
   }
 
-  drawPlayer(ctx, w.player.x, sy(playerWorldY(w)), onSafeGround(w), skin)
+  // Vloeiend stuitertje: licht de speler even op na elke beweging.
+  const lift = Math.sin(w.hopAnim * Math.PI) * 7
+  drawPlayer(ctx, w.player.x, sy(playerWorldY(w)) - lift, onSafeGround(w), skin)
 
   if (w.started && w.idleFor > 2.5 && !w.over) drawIdleHint(ctx, width, height)
 }

@@ -27,6 +27,7 @@ interface Retention { users: number; returning_users: number; returning_rate: nu
 interface RecentEvent { name: string; props: Record<string, unknown> | null; path: string | null; created_at: string }
 interface AdminRow { user_id: string; email: string | null; created_at: string }
 interface InviteRow { id: string; email: string; status: string; expires_at: string; used_at: string | null; created_at: string }
+interface EntryRow { id: string; game_id: string; score: number; email: string; created_at: string }
 type Bar = { label: string; value: number }
 
 // ---- Helpers ---------------------------------------------------------------
@@ -218,7 +219,11 @@ function makeDemo(days: number) {
     return { name: n, props, path: '/', created_at: new Date(Date.now() - i * rnd(20, 300) * 1000).toISOString() }
   })
   const retention: Retention = { users: 640, returning_users: 243, returning_rate: 38, new_today: 22, returning_today: 16, dau: 38, mau: 640 }
-  return { overview, live: 6, byName, daily, hourly, dow, funnel, recent, tabs, ferries, chars, devices, retention }
+  const entries: EntryRow[] = Array.from({ length: 8 }, (_, i) => ({
+    id: String(i), game_id: 'ponthop', score: rnd(20, 130), email: `speler${i}@voorbeeld.nl`,
+    created_at: new Date(Date.now() - i * 3_600_000 * rnd(1, 40)).toISOString(),
+  }))
+  return { overview, live: 6, byName, daily, hourly, dow, funnel, recent, tabs, ferries, chars, devices, retention, entries }
 }
 
 // ---- Hoofdcomponent ---------------------------------------------------------
@@ -250,6 +255,7 @@ export function Admin() {
 
   const [admins, setAdmins] = useState<AdminRow[]>([])
   const [invites, setInvites] = useState<InviteRow[]>([])
+  const [entries, setEntries] = useState<EntryRow[]>([])
   const [inviteEmail, setInviteEmail] = useState('')
   const [newInvite, setNewInvite] = useState<{ email: string } | null>(null)
   const [mgmtMsg, setMgmtMsg] = useState<string | null>(null)
@@ -291,7 +297,7 @@ export function Admin() {
       const d = makeDemo(days)
       setOverview(d.overview); setLive(d.live); setByName(d.byName); setDaily(d.daily); setHourly(d.hourly)
       setDow(d.dow); setFunnel(d.funnel); setRecent(d.recent); setTabs(d.tabs); setFerries(d.ferries)
-      setChars(d.chars); setDevices(d.devices); setRetention(d.retention)
+      setChars(d.chars); setDevices(d.devices); setRetention(d.retention); setEntries(d.entries)
       setLastUpdated(new Date()); setFirstLoaded(true)
       return
     }
@@ -299,7 +305,7 @@ export function Admin() {
     setLoading(true)
     const num = (v: unknown) => (typeof v === 'number' ? v : 0)
     const list = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
-    const [ov, lv, bn, dl, hr, dw, fn, rt, rc, tb, fr, ch, dv, ad, iv] = await Promise.all([
+    const [ov, lv, bn, dl, hr, dw, fn, rt, rc, tb, fr, ch, dv, ad, iv, he] = await Promise.all([
       supabase.rpc('analytics_overview'),
       supabase.rpc('analytics_live'),
       supabase.rpc('analytics_by_name', { days }),
@@ -315,6 +321,7 @@ export function Admin() {
       supabase.rpc('analytics_prop', { p_name: 'session_start', p_key: 'standalone', days }),
       supabase.rpc('admin_list_admins'),
       supabase.rpc('admin_list_invites'),
+      supabase.rpc('admin_list_highscore_entries'),
     ])
     if (ov.data) setOverview(ov.data as Overview)
     setLive(num(lv.data))
@@ -337,6 +344,7 @@ export function Admin() {
     })))
     setAdmins(list<AdminRow>(ad.data))
     setInvites(list<InviteRow>(iv.data))
+    setEntries(list<EntryRow>(he.data))
     setLastUpdated(new Date()); setFirstLoaded(true); setLoading(false)
   }, [days, demo])
 
@@ -377,6 +385,20 @@ export function Admin() {
     const n = (data as { deleted?: number } | null)?.deleted ?? 0
     setTestMsg(error ? error.message : `${n} test-events gewist.`)
     loadAll()
+  }
+
+  const exportCsv = () => {
+    const head = 'datum,score,email,spel\n'
+    const body = entries
+      .map((e) => `${new Date(e.created_at).toISOString()},${e.score},"${e.email.replace(/"/g, '""')}",${e.game_id}`)
+      .join('\n')
+    const blob = new Blob([head + body], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'ijhop-inzendingen.csv'
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   // ---- Auth ----
@@ -627,6 +649,38 @@ export function Admin() {
           </div>
           {demo && <p className="mt-2 text-xs text-amber-600">Zet Demo uit om met echte test-events te werken.</p>}
           {testMsg && !demo && <p className="mt-2 text-xs text-slate-500">{testMsg}</p>}
+        </Panel>
+      </div>
+
+      {/* Inzendingen prijzenactie */}
+      <div className="mt-4">
+        <Panel title="Inzendingen (prijzenactie)" emoji="📩">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs text-slate-500">{nf(entries.length)} inzending(en) met toestemming.</p>
+            <button type="button" onClick={exportCsv} disabled={entries.length === 0} className="rounded-xl bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">⬇ Export CSV</button>
+          </div>
+          {entries.length === 0 ? <Empty text="Nog geen inzendingen." /> : (
+            <div className="max-h-72 overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                    <th className="py-1 font-semibold">Datum</th>
+                    <th className="font-semibold">Score</th>
+                    <th className="font-semibold">E-mail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((e) => (
+                    <tr key={e.id} className="border-t border-slate-100">
+                      <td className="py-1.5 text-slate-500">{new Date(e.created_at).toLocaleDateString('nl-NL')}</td>
+                      <td className="font-semibold tabular-nums text-slate-800">{e.score}</td>
+                      <td className="truncate text-slate-700">{e.email}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Panel>
       </div>
 

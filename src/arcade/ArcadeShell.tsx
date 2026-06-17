@@ -10,6 +10,11 @@ import { Leaderboard } from './Leaderboard'
 import { getNickname, setNickname, NICK_MAX } from '../lib/nickname'
 import { hasProfanity, sanitizeName } from '../lib/profanity'
 import { track } from '../lib/analytics'
+import { PrizeEntry } from './PrizeEntry'
+import { SponsorCard } from '../components/SponsorCard'
+
+// Vanaf deze score tonen we de optionele prijzen-inzending.
+const PRIZE_MIN_SCORE = 20
 import type { GameInitOpts, GameModule, GameOverLine } from './types'
 
 // Eén spel voor nu; de ranglijst draait op dit spel-id.
@@ -432,6 +437,7 @@ export function ArcadeShell({
             {t.arcade.addedAs}{' '}
             <span className="font-semibold text-white">{sanitizeName(nick)}</span>
           </p>
+          {result.score >= PRIZE_MIN_SCORE && <PrizeEntry gameId="ponthop" score={result.score} />}
           {crossingBoard}
           {leaderboard}
           <div className="flex w-full max-w-xs flex-col gap-2">
@@ -450,6 +456,7 @@ export function ArcadeShell({
               {t.arcade.menu}
             </button>
           </div>
+          <SponsorCard variant="compact" />
         </div>
       )}
     </div>
