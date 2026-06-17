@@ -340,6 +340,7 @@ export function ArcadeShell({
               {t.arcade.close}
             </button>
           )}
+          <p className="text-[10px] text-white/30">v{__BUILD_ID__}</p>
         </div>
       )}
 

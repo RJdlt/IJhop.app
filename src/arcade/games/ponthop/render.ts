@@ -65,9 +65,9 @@ export function render(
   const sy = (worldY: number) => height - (worldY - cameraY)
 
   ctx.clearRect(0, 0, width, height)
-  // Water-basis over het hele veld: zo oogt de ruimte onder de startsteiger als
-  // het IJ i.p.v. een afgekapt leeg vlak. Banen tekenen er dekkend overheen.
-  ctx.fillStyle = WATER_DK
+  // Water-basis over het hele veld (zelfde kleur als de pont-banen), zodat de
+  // ruimte onder de startsteiger als doorlopend IJ oogt i.p.v. een leeg vlak.
+  ctx.fillStyle = WATER
   ctx.fillRect(0, 0, width, height)
 
   const firstRow = Math.floor(cameraY / ROW_H) - 1
