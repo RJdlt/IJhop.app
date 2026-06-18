@@ -7,6 +7,7 @@ import { ArcadeSnack } from './components/ArcadeSnack'
 import { TabBar } from './components/TabBar'
 import { InstallPrompt } from './components/InstallPrompt'
 import { SponsorCard } from './components/SponsorCard'
+import { OntmoetingCard } from './components/OntmoetingCard'
 import { FerryPicker } from './components/FerryPicker'
 import type { FerryOption } from './components/FerryPicker'
 import { ArcadeShell } from './arcade/ArcadeShell'
@@ -146,6 +147,13 @@ export default function App() {
   const crossingRoom = activeCrossing?.room ?? null
   const crossingLabel = activeCrossing?.label
 
+  // Pont Ontmoeting: overtocht-kamer zodra je een pont kiest (lijn + vertrekmoment),
+  // zodat twee mensen op dezelfde afvaart elkaar kunnen vinden.
+  const ontmoetingRoom =
+    watched && watchedSecs != null
+      ? `${watched.key}@${Math.floor(nowSecondOfWeek + watchedSecs)}`
+      : null
+
   // Live spelers-teller op deze overtocht (presence), terwijl de arcade open is.
   const presenceNick = useMemo(() => getNickname(), [])
   const crossingPlayers = usePresence(
@@ -178,6 +186,7 @@ export default function App() {
               )
             })}
 
+            {ontmoetingRoom && <OntmoetingCard room={ontmoetingRoom} userId={userId} />}
             <ArcadeSnack
               onOpen={() => {
                 track('snack_open')
