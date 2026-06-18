@@ -90,6 +90,13 @@ export function render(
     if (lane.coinX !== null && !lane.coinTaken) drawCoin(ctx, lane.coinX, bandTop + ROW_H / 2)
   }
 
+  // Zacht diepte-vignet voor focus (subtiel donkerder naar de randen).
+  const vg = ctx.createRadialGradient(width / 2, height * 0.42, height * 0.25, width / 2, height * 0.5, height * 0.8)
+  vg.addColorStop(0, 'rgba(0,0,0,0)')
+  vg.addColorStop(1, 'rgba(2,12,22,0.22)')
+  ctx.fillStyle = vg
+  ctx.fillRect(0, 0, width, height)
+
   // Vloeiend stuitertje: licht de speler even op na elke beweging.
   const lift = Math.sin(w.hopAnim * Math.PI) * 7
   drawPlayer(ctx, w.player.x, sy(playerWorldY(w)) - lift, onSafeGround(w), skin)
@@ -106,7 +113,10 @@ function onSafeGround(w: World): boolean {
 
 function drawLaneBackground(ctx: CanvasRenderingContext2D, lane: Lane, width: number, top: number) {
   if (lane.kind === 'pier') {
-    ctx.fillStyle = PIER
+    const pg = ctx.createLinearGradient(0, top, 0, top + ROW_H)
+    pg.addColorStop(0, '#EFC79A')
+    pg.addColorStop(1, PIER)
+    ctx.fillStyle = pg
     ctx.fillRect(0, top, width, ROW_H)
     ctx.fillStyle = PIER_EDGE
     ctx.fillRect(0, top, width, 4)
@@ -246,22 +256,38 @@ function drawBus(ctx: CanvasRenderingContext2D, x: number, top: number, w: numbe
 }
 
 function drawCoin(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
-  ctx.fillStyle = COIN
+  // schaduwtje
+  ctx.fillStyle = 'rgba(0,0,0,0.18)'
+  ctx.beginPath()
+  ctx.ellipse(cx, cy + 12, 10, 3.5, 0, 0, Math.PI * 2)
+  ctx.fill()
+  // warme stroopwafel met radiale glans
+  const g = ctx.createRadialGradient(cx - 4, cy - 4, 2, cx, cy, 13)
+  g.addColorStop(0, '#F2B24A')
+  g.addColorStop(1, COIN)
+  ctx.fillStyle = g
   ctx.beginPath()
   ctx.arc(cx, cy, 12, 0, Math.PI * 2)
   ctx.fill()
   ctx.strokeStyle = COIN_DK
   ctx.lineWidth = 2
   ctx.stroke()
-  // stroopwafel-ruitjes
-  ctx.strokeStyle = 'rgba(0,0,0,0.25)'
+  // ruitjespatroon (kruislings)
+  ctx.strokeStyle = 'rgba(120,70,10,0.35)'
   ctx.lineWidth = 1
   for (let i = -2; i <= 2; i += 2) {
     ctx.beginPath()
     ctx.moveTo(cx - 8, cy + i * 3)
     ctx.lineTo(cx + 8, cy + i * 3)
+    ctx.moveTo(cx + i * 3, cy - 8)
+    ctx.lineTo(cx + i * 3, cy + 8)
     ctx.stroke()
   }
+  // glansje
+  ctx.fillStyle = 'rgba(255,255,255,0.5)'
+  ctx.beginPath()
+  ctx.ellipse(cx - 4, cy - 5, 3, 1.6, -0.6, 0, Math.PI * 2)
+  ctx.fill()
 }
 
 function tri(ctx: CanvasRenderingContext2D, ax: number, ay: number, bx: number, by: number, cx: number, cy: number) {
@@ -300,6 +326,9 @@ function drawPlayer(
   ctx.beginPath()
   ctx.arc(x, hy, r, 0, Math.PI * 2)
   ctx.fill()
+  ctx.lineWidth = 1.5
+  ctx.strokeStyle = 'rgba(0,0,0,0.10)'
+  ctx.stroke()
 
   // hoofddeksel / accessoire per poppetje
   ctx.fillStyle = skin.capColor
@@ -355,15 +384,43 @@ function drawPlayer(
       ctx.arc(x, hy - 3, r, Math.PI, 0)
       ctx.fill()
       ctx.fillRect(x - r - 3, hy - 3, (r + 3) * 2, 4)
+      // gouden kapiteins-emblem op de pet
+      ctx.fillStyle = '#F4C20D'
+      ctx.beginPath()
+      ctx.arc(x, hy - 8, 2, 0, Math.PI * 2)
+      ctx.fill()
     }
   }
 
-  // oogjes
+  // wangetjes (niet bij de kat, die heeft een neusje)
+  if (!isCat) {
+    ctx.fillStyle = 'rgba(232,144,154,0.5)'
+    ctx.beginPath()
+    ctx.arc(x - 8, hy + 5, 2.2, 0, Math.PI * 2)
+    ctx.arc(x + 8, hy + 5, 2.2, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  // oogjes met glansje
   ctx.fillStyle = '#1B2A33'
   ctx.beginPath()
-  ctx.arc(x - 5, hy + 2, 1.8, 0, Math.PI * 2)
-  ctx.arc(x + 5, hy + 2, 1.8, 0, Math.PI * 2)
+  ctx.arc(x - 5, hy + 2, 1.9, 0, Math.PI * 2)
+  ctx.arc(x + 5, hy + 2, 1.9, 0, Math.PI * 2)
   ctx.fill()
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
+  ctx.beginPath()
+  ctx.arc(x - 4.3, hy + 1.2, 0.7, 0, Math.PI * 2)
+  ctx.arc(x + 5.7, hy + 1.2, 0.7, 0, Math.PI * 2)
+  ctx.fill()
+
+  // vriendelijk lachje (niet bij de kat)
+  if (!isCat) {
+    ctx.strokeStyle = 'rgba(60,40,30,0.5)'
+    ctx.lineWidth = 1.4
+    ctx.beginPath()
+    ctx.arc(x, hy + 3, 3.2, Math.PI * 0.15, Math.PI * 0.85)
+    ctx.stroke()
+  }
 
   if (isCat) {
     // roze neusje + snorharen
