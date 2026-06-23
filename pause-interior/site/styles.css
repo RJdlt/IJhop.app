@@ -166,3 +166,38 @@ p{margin:0 0 1rem}
   .grid.cols-3,.grid.cols-4,.grid.cols-2{grid-template-columns:1fr}
   .foot-grid{grid-template-columns:1fr}
 }
+
+/* ---------- product detail page ---------- */
+.pdp{display:grid;grid-template-columns:1.1fr .9fr;gap:clamp(1.5rem,4vw,3.5rem);align-items:start}
+.gallery .ph{aspect-ratio:4/5;margin-bottom:1rem}
+.thumbs{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem}
+.thumbs .ph{aspect-ratio:1/1;cursor:pointer}
+.buybox{position:sticky;top:96px}
+.buybox .mat{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--clay);margin-bottom:.4rem}
+.buybox h1{font-size:clamp(2rem,4vw,2.8rem);margin-bottom:.2em}
+.buybox .price{font-size:1.3rem;color:var(--ink);margin-bottom:1.2rem}
+.buybox .desc{color:var(--stone);font-family:var(--serif);font-style:italic;font-size:1.15rem;margin-bottom:1.4rem}
+.options{display:flex;gap:.6rem;margin-bottom:1.4rem;flex-wrap:wrap}
+.options button{background:var(--offwhite);border:1px solid var(--clay);padding:.6em 1.1em;font-family:var(--sans);font-size:.85rem;cursor:pointer}
+.options button.active,.options button:hover{border-color:var(--stone);background:var(--sand)}
+.buybox .btn{width:100%;text-align:center;margin-bottom:1rem}
+.trust{display:flex;flex-direction:column;gap:.5rem;border-top:1px solid rgba(184,166,143,.5);padding-top:1.1rem;font-size:.9rem;color:var(--muted)}
+.spec{display:grid;grid-template-columns:1fr 1fr;gap:.5rem 2rem;margin-top:1.2rem;font-size:.92rem}
+.spec div{border-bottom:1px solid rgba(184,166,143,.35);padding:.5rem 0;display:flex;justify-content:space-between}
+.spec span:first-child{color:var(--muted)}
+
+/* ---------- help / faq ---------- */
+.faq{max-width:760px;margin:0 auto}
+.faq details{border-bottom:1px solid rgba(184,166,143,.5);padding:1rem 0}
+.faq summary{cursor:pointer;font-family:var(--serif);font-size:1.2rem;color:var(--ink);list-style:none}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";float:right;color:var(--stone)}
+.faq details[open] summary::after{content:"\2013"}
+.help-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;max-width:900px;margin:0 auto 2.5rem}
+@media(max-width:900px){.pdp{grid-template-columns:1fr}.buybox{position:static}.help-grid{grid-template-columns:1fr}}
+
+/* ---------- contact ---------- */
+.contact-form{max-width:560px;margin:0 auto;display:grid;gap:1rem}
+.contact-form input,.contact-form textarea{padding:.9em 1.1em;border:1px solid var(--clay);background:var(--offwhite);font-family:var(--sans);font-size:.95rem;color:var(--ink);width:100%}
+.contact-form textarea{min-height:140px;resize:vertical}
+.contact-form input:focus,.contact-form textarea:focus{outline:2px solid var(--stone);outline-offset:1px}
