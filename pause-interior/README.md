@@ -21,6 +21,19 @@ marketing on top of it.
 > All five build on each other and on the same brand idea. They are
 > ready-to-use, with founder inputs flagged `⚠️ CONFIRM` throughout.
 
+### Share-ready business plan (PDF / Word)
+
+A single, polished **business plan** that synthesises all five documents — and
+adds a section on **how Robert-Jan helps build it** for the founder — is
+available to share:
+
+- 📄 **[Pause-Interior-Business-Plan.pdf](./Pause-Interior-Business-Plan.pdf)**
+- 📝 **[Pause-Interior-Business-Plan.docx](./Pause-Interior-Business-Plan.docx)** (editable Word)
+- 🧩 [Pause-Interior-Business-Plan.html](./Pause-Interior-Business-Plan.html) (source; regenerate the PDF/Word from this)
+
+> Regenerate after edits: `python3 -c "from weasyprint import HTML; HTML('Pause-Interior-Business-Plan.html').write_pdf('Pause-Interior-Business-Plan.pdf')"`
+> and `python3 -c "from htmldocx import HtmlToDocx; from docx import Document; d=Document(); HtmlToDocx().add_html_to_document(open('Pause-Interior-Business-Plan.html').read(), d); d.save('Pause-Interior-Business-Plan.docx')"`
+
 ## How this is meant to be used
 
 1. The founder reads **[01-BUSINESS-CONCEPT.md](./01-BUSINESS-CONCEPT.md)** and
