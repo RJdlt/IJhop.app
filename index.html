@@ -1,22 +1,174 @@
-<!doctype html>
-<html lang="nl">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>IJhop — pont tijden over het IJ</title>
-    <meta name="description" content="Live aftelklok naar de eerstvolgende pont over het IJ in Amsterdam. Werkt offline." />
-    <meta name="theme-color" content="#1D9E75" />
-    <meta property="og:title" content="IJhop" />
-    <meta property="og:description" content="Niet zweten, niet zwemmen. Pont tijden over het IJ met live aftelklok." />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://ijhop.app" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.json" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pause Interior, timeless Scandinavian interior, made to last</title>
+<meta name="description" content="Pause Interior is a Swedish interior brand. Timeless pieces in natural materials, made to last, for a home that feels calm. Designed in Sweden.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<meta property="og:title" content="Pause Interior, timeless Scandinavian interior">
+<meta property="og:description" content="Timeless pieces in natural materials, made to last, for a home that feels calm. Designed in Sweden.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#F6F2EC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="site-header">
+  <div class="wrap nav">
+    <a href="index.html" class="brand-mark">Pause</a>
+    <nav>
+      <ul class="nav-links" id="navLinks">
+        <li><a href="shop.html">Shop</a></li>
+        <li><a href="shop.html">Collections</a></li>
+        <li><a href="our-story.html">Our Story</a></li>
+        <li><a href="journal.html">Journal</a></li>
+      </ul>
+    </nav>
+    <div class="nav-tools">
+      <a href="#newsletter" class="hide-sm">Search</a>
+      <a href="shop.html">Cart (0)</a>
+      <button class="nav-toggle" id="navToggle" aria-label="Menu">&#9776;</button>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap">
+    <h1>Pause. You're home.</h1>
+    <p>Timeless pieces for a calmer home.</p>
+    <a href="shop.html" class="btn">Explore the collection</a>
+  </div>
+</section>
+
+<!-- PROMISE -->
+<div class="promise"><div class="wrap"><p>Fewer, better things, made to last. Designed in Sweden.</p></div></div>
+
+<!-- FEATURED -->
+<section class="section">
+  <div class="wrap">
+    <div class="center" style="margin-bottom:2.5rem">
+      <div class="eyebrow">The collection</div>
+      <h2>Pieces worth keeping</h2>
+      <p class="lead">A small, considered collection in natural materials. Chosen slowly, made to live with for years.</p>
+    </div>
+    <div class="grid cols-4">
+      <a class="card" href="shop.html">
+        <div class="ph p1 tall" data-label="Oak side table"></div>
+        <div class="body"><div class="mat">Solid oak</div><h3>Lull Side Table</h3><div class="price">3,900 kr</div></div>
+      </a>
+      <a class="card" href="shop.html">
+        <div class="ph p2 tall" data-label="Linen throw"></div>
+        <div class="body"><div class="mat">Washed linen</div><h3>Stilla Throw</h3><div class="price">1,150 kr</div></div>
+      </a>
+      <a class="card" href="shop.html">
+        <div class="ph p3 tall" data-label="Paper pendant"></div>
+        <div class="body"><div class="mat">Paper and oak</div><h3>Måne Pendant</h3><div class="price">2,450 kr</div></div>
+      </a>
+      <a class="card" href="shop.html">
+        <div class="ph p4 tall" data-label="Stoneware vase"></div>
+        <div class="body"><div class="mat">Hand glazed stoneware</div><h3>Ro Vase</h3><div class="price">690 kr</div></div>
+      </a>
+    </div>
+    <div class="center" style="margin-top:2.6rem"><a href="shop.html" class="btn ghost">View all pieces</a></div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- PHILOSOPHY SPLIT -->
+<section class="section">
+  <div class="wrap split">
+    <div class="ph p2 wide" data-label="A calm room in natural light"></div>
+    <div class="copy">
+      <div class="eyebrow">Our way</div>
+      <h2>A home that lets you breathe</h2>
+      <p class="lead">Pause is the moment you walk through your door and your shoulders drop.</p>
+      <p>We make and choose pieces in honest, natural materials. Oak, linen, wool, stone, ceramic. Designed to feel calm, and built to last far longer than a passing trend.</p>
+      <p><a href="our-story.html" class="link-line">Read our story</a></p>
+    </div>
+  </div>
+</section>
+
+<!-- CATEGORIES -->
+<section class="section" style="background:var(--sand)">
+  <div class="wrap">
+    <div class="center" style="margin-bottom:2.2rem"><div class="eyebrow">Shop by room and material</div><h2>Find your calm</h2></div>
+    <div class="grid cols-4">
+      <a class="cat" href="shop.html"><div class="ph p3" data-label="Furniture"></div><span class="label">Furniture</span></a>
+      <a class="cat" href="shop.html"><div class="ph p1" data-label="Lighting"></div><span class="label">Lighting</span></a>
+      <a class="cat" href="shop.html"><div class="ph p2" data-label="Textiles"></div><span class="label">Textiles</span></a>
+      <a class="cat" href="shop.html"><div class="ph p4" data-label="Objects"></div><span class="label">Objects</span></a>
+    </div>
+  </div>
+</section>
+
+<!-- MATERIALS / SUSTAINABILITY -->
+<section class="section">
+  <div class="wrap split reverse">
+    <div class="copy">
+      <div class="eyebrow">Materials</div>
+      <h2>Honest, natural, traceable</h2>
+      <p>We choose materials we can stand behind and tell you exactly where they come from. Pieces made to be repaired and kept, not replaced. Responsibility is the starting point, not an afterthought.</p>
+      <p><a href="our-story.html" class="link-line">How we make things</a></p>
+    </div>
+    <div class="ph p4 wide" data-label="Texture of oak and linen"></div>
+  </div>
+</section>
+
+<!-- JOURNAL TEASER -->
+<section class="section" style="background:var(--sand)">
+  <div class="wrap">
+    <div class="center" style="margin-bottom:2.2rem"><div class="eyebrow">The journal</div><h2>Notes on a slower home</h2></div>
+    <div class="grid cols-3">
+      <a class="article-card" href="journal.html"><div class="ph p1" data-label="Journal"></div><div class="meta">Slow living</div><h3>How to make a small bedroom feel calm</h3></a>
+      <a class="article-card" href="journal.html"><div class="ph p3" data-label="Journal"></div><div class="meta">Materials</div><h3>A short guide to oak, linen, wool and stone</h3></a>
+      <a class="article-card" href="journal.html"><div class="ph p2" data-label="Journal"></div><div class="meta">At home</div><h3>Making a pause corner in your home</h3></a>
+    </div>
+  </div>
+</section>
+
+<!-- NEWSLETTER -->
+<section class="section newsletter" id="newsletter">
+  <div class="wrap">
+    <div class="eyebrow">Slow letters</div>
+    <h2>Now and then, a quiet note</h2>
+    <p class="lead">A little on slow living and new pieces. No noise. Leave your email and we will be in touch now and then.</p>
+    <form onsubmit="return false">
+      <input type="email" placeholder="Your email" aria-label="Your email" required>
+      <button class="btn" type="submit">Join</button>
+    </form>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <div class="brand-mark">Pause Interior</div>
+        <p style="margin-top:.8rem;max-width:24ch">Timeless Scandinavian interior, made to last. Designed in Sweden.</p>
+      </div>
+      <div><h4>Shop</h4><ul><li><a href="shop.html">Furniture</a></li><li><a href="shop.html">Lighting</a></li><li><a href="shop.html">Textiles</a></li><li><a href="shop.html">Objects</a></li></ul></div>
+      <div><h4>Brand</h4><ul><li><a href="our-story.html">Our Story</a></li><li><a href="our-story.html">Materials</a></li><li><a href="journal.html">Journal</a></li></ul></div>
+      <div><h4>Help</h4><ul><li><a href="help.html">Shipping</a></li><li><a href="help.html">Returns</a></li><li><a href="contact.html">Contact</a></li></ul></div>
+    </div>
+    <div class="foot-bottom">
+      <span>&copy; 2026 Pause Interior</span>
+      <span>Designed in Sweden</span>
+      <span>Instagram &middot; Pinterest</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  var t=document.getElementById('navToggle'),l=document.getElementById('navLinks');
+  if(t){t.addEventListener('click',function(){l.classList.toggle('open')})}
+</script>
+</body>
 </html>
