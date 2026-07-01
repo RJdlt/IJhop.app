@@ -25,6 +25,41 @@ const BUS_BLUE = '#0B5FA5'
 const COIN = '#D98A1E'
 const COIN_DK = '#A8650F'
 
+// Tijd-van-de-dag: het IJ kleurt mee met het echte Amsterdamse moment.
+interface SkyKF { h: number; top: string; bot: string; dark: number }
+const SKY: SkyKF[] = [
+  { h: 0, top: '#0B2A45', bot: '#06182B', dark: 1 },
+  { h: 6, top: '#3A5A78', bot: '#1E3A54', dark: 0.7 },
+  { h: 7.5, top: '#E9A87E', bot: '#4A6B86', dark: 0.35 },
+  { h: 9, top: '#1AA0D8', bot: '#0E6E9B', dark: 0.05 },
+  { h: 17, top: '#1AA0D8', bot: '#0E6E9B', dark: 0.05 },
+  { h: 19, top: '#F2A65A', bot: '#6E4E86', dark: 0.4 },
+  { h: 20.5, top: '#4B3F7A', bot: '#241F3A', dark: 0.8 },
+  { h: 22, top: '#0B2A45', bot: '#06182B', dark: 1 },
+  { h: 24, top: '#0B2A45', bot: '#06182B', dark: 1 },
+]
+function lerpHex(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16)
+  const pb = parseInt(b.slice(1), 16)
+  const r = Math.round(((pa >> 16) & 255) + (((pb >> 16) & 255) - ((pa >> 16) & 255)) * t)
+  const g = Math.round(((pa >> 8) & 255) + (((pb >> 8) & 255) - ((pa >> 8) & 255)) * t)
+  const bl = Math.round((pa & 255) + ((pb & 255) - (pa & 255)) * t)
+  return `rgb(${r},${g},${bl})`
+}
+function skyPalette(hour: number): { top: string; bot: string; dark: number } {
+  let a = SKY[0]
+  let b = SKY[SKY.length - 1]
+  for (let i = 0; i < SKY.length - 1; i++) {
+    if (hour >= SKY[i].h && hour <= SKY[i + 1].h) {
+      a = SKY[i]
+      b = SKY[i + 1]
+      break
+    }
+  }
+  const t = b.h === a.h ? 0 : (hour - a.h) / (b.h - a.h)
+  return { top: lerpHex(a.top, b.top, t), bot: lerpHex(a.bot, b.bot, t), dark: a.dark + (b.dark - a.dark) * t }
+}
+
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   const rad = Math.min(r, w / 2, h / 2)
   ctx.beginPath()
@@ -65,13 +100,22 @@ export function render(
   const sy = (worldY: number) => height - (worldY - cameraY)
 
   ctx.clearRect(0, 0, width, height)
-  // Water-basis met een zachte verloop voor diepte (lichter boven, donker onder),
-  // zodat de ruimte onder de startsteiger als doorlopend IJ oogt.
+  // Water-basis kleurt mee met het echte Amsterdamse moment (dag/nacht/gouden uur).
+  const nowD = new Date()
+  const sky = skyPalette(nowD.getHours() + nowD.getMinutes() / 60)
   const wg = ctx.createLinearGradient(0, 0, 0, height)
-  wg.addColorStop(0, '#1AA0D8')
-  wg.addColorStop(1, WATER_DK)
+  wg.addColorStop(0, sky.top)
+  wg.addColorStop(1, sky.bot)
   ctx.fillStyle = wg
   ctx.fillRect(0, 0, width, height)
+  // 's Nachts een zachte maanlicht-streep op het water.
+  if (sky.dark > 0.55) {
+    const ml = ctx.createLinearGradient(0, 0, 0, height)
+    ml.addColorStop(0, `rgba(220,235,255,${0.10 * sky.dark})`)
+    ml.addColorStop(1, 'rgba(220,235,255,0)')
+    ctx.fillStyle = ml
+    ctx.fillRect(width * 0.5 - 34, 0, 68, height)
+  }
 
   const firstRow = Math.floor(cameraY / ROW_H) - 1
   const lastRow = Math.ceil((cameraY + height) / ROW_H) + 1
@@ -93,7 +137,7 @@ export function render(
   // Zacht diepte-vignet voor focus (subtiel donkerder naar de randen).
   const vg = ctx.createRadialGradient(width / 2, height * 0.42, height * 0.25, width / 2, height * 0.5, height * 0.8)
   vg.addColorStop(0, 'rgba(0,0,0,0)')
-  vg.addColorStop(1, 'rgba(2,12,22,0.22)')
+  vg.addColorStop(1, `rgba(2,12,22,${(0.16 + sky.dark * 0.22).toFixed(3)})`)
   ctx.fillStyle = vg
   ctx.fillRect(0, 0, width, height)
 

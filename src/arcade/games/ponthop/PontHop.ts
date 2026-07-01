@@ -14,6 +14,7 @@ import {
   runReward,
   saveProfile,
 } from './profile'
+import { recordRun as recordChallenge } from './challenge'
 
 /**
  * Pont Hop — Kapitein Pim steekt het IJ over: hop van steiger naar steiger,
@@ -56,15 +57,20 @@ export function createPontHop(): GameModule {
       const reward = runReward(run)
       const before = loadProfile()
       const profile = applyRunResult(before, run)
+      // Dagelijkse uitdaging bijwerken; net gehaald = extra stroopwafels.
+      const chal = recordChallenge({ coins: world.coins, crossings: world.crossings, score: world.score })
+      if (chal.justCompleted && chal.reward > 0) profile.wallet += chal.reward
       saveProfile(profile)
       // Mijlpaal-poppetjes die door deze run zijn vrijgespeeld.
       const unlocked = CHARACTERS.filter((c) => !isUnlocked(before, c) && isUnlocked(profile, c))
-      opts.onGameOver(world.score, [
+      const lines = [
         { label: 'Level', value: String(runLevel(world.crossings)) },
         { label: 'Bonus 🧇', value: `+${reward}` },
         { label: 'Totaal 🧇', value: String(profile.wallet) },
         ...unlocked.map((c) => ({ label: '🎉 Vrijgespeeld', value: `${c.emoji} ${c.name.nl}` })),
-      ])
+      ]
+      if (chal.justCompleted) lines.push({ label: '🎯 Uitdaging', value: `+${chal.reward} 🧇` })
+      opts.onGameOver(world.score, lines)
       return
     }
     raf = requestAnimationFrame(frame)

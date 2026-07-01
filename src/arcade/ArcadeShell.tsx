@@ -13,6 +13,7 @@ import { track } from '../lib/analytics'
 import { PrizeEntry } from './PrizeEntry'
 import { shouldOfferPrize, markPrizeSeen } from '../lib/prize'
 import { SponsorCard } from '../components/SponsorCard'
+import { DailyChallenge } from './DailyChallenge'
 import type { GameInitOpts, GameModule, GameOverLine } from './types'
 
 // Eén spel voor nu; de ranglijst draait op dit spel-id.
@@ -380,6 +381,7 @@ export function ArcadeShell({
               </button>
             ))}
           </div>
+          <DailyChallenge />
           {GAMES.map((g) => (g.MenuPanel ? <g.MenuPanel key={g.id} /> : null))}
           {crossingBoard}
           {leaderboard}
