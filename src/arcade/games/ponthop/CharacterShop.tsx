@@ -68,7 +68,7 @@ export function CharacterShop() {
   const prog = levelProgress(profile.totalCrossings)
 
   return (
-    <div className="w-full max-w-xs text-left">
+    <div className="w-full max-w-xs rounded-2xl bg-white/[0.06] p-3.5 text-left ring-1 ring-white/10 backdrop-blur-md">
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-white/60">
           {t.arcade.shopTitle}

@@ -14,6 +14,7 @@ import { PrizeEntry } from './PrizeEntry'
 import { shouldOfferPrize, markPrizeSeen } from '../lib/prize'
 import { SponsorCard } from '../components/SponsorCard'
 import { DailyChallenge } from './DailyChallenge'
+import { arcadeBg, glass, glassSoft, playPill } from './ui'
 import type { GameInitOpts, GameModule, GameOverLine } from './types'
 
 // Eén spel voor nu; de ranglijst draait op dit spel-id.
@@ -300,14 +301,13 @@ export function ArcadeShell({
   const rootClass = `relative w-full overflow-hidden rounded-3xl bg-brand-dark ${
     pageMode ? (screen === 'playing' ? 'h-[78dvh] min-h-[420px]' : '') : 'h-full'
   }`
-  const panelBase =
-    'flex w-full flex-col items-center gap-5 bg-brand-dark px-6 py-8 text-center text-white'
+  const panelBase = `flex w-full flex-col items-center gap-5 ${arcadeBg} px-6 py-8 text-center text-white`
   const menuClass = pageMode
     ? `relative ${panelBase}`
     : `absolute inset-0 justify-start overflow-y-auto ${panelBase}`
   const overClass = pageMode
-    ? 'relative flex w-full flex-col items-center gap-4 bg-brand-dark p-6 text-center text-white'
-    : 'absolute inset-0 flex flex-col items-center justify-center gap-4 bg-brand-dark/85 p-6 text-center text-white backdrop-blur-sm'
+    ? `relative flex w-full flex-col items-center gap-4 ${arcadeBg} p-6 text-center text-white`
+    : `absolute inset-0 flex flex-col items-center justify-center gap-4 ${arcadeBg} p-6 text-center text-white`
 
   return (
     <div ref={wrapRef} className={rootClass}>
@@ -352,9 +352,11 @@ export function ArcadeShell({
       {/* Menu (dekkende achtergrond zodat geen game-frame doorschemert) */}
       {screen === 'menu' && (
         <div className={menuClass}>
-          <div>
-            <p className="text-2xl font-bold">{t.arcade.title}</p>
-            <p className="mt-1 text-sm text-white/70">{t.arcade.pickGame}</p>
+          <div className="pt-1">
+            <p className="text-3xl font-black tracking-tight text-white drop-shadow-[0_2px_16px_rgba(29,158,117,0.55)]">
+              🕹️ {t.arcade.title}
+            </p>
+            <p className="mt-1 text-sm text-white/55">{t.arcade.pickGame}</p>
           </div>
           {nameField}
           {menuExtra}
@@ -365,19 +367,19 @@ export function ArcadeShell({
                 type="button"
                 onClick={() => startGame(g.id)}
                 aria-label={`${t.arcade.play} ${g.title[lang]}`}
-                className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3.5 text-left ring-1 ring-white/10 transition hover:bg-white/15 active:scale-[0.99]"
+                className={`flex items-center gap-3 ${glass} px-4 py-4 text-left transition hover:bg-white/[0.1] active:scale-[0.99]`}
               >
-                <span className="text-3xl">{g.emoji}</span>
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/10 text-3xl ring-1 ring-white/10">
+                  {g.emoji}
+                </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block font-bold leading-tight">{g.title[lang]}</span>
-                  <span className="block truncate text-xs text-white/70">{g.tagline[lang]}</span>
-                  <span className="mt-0.5 block text-[11px] text-white/50">
+                  <span className="block text-base font-extrabold leading-tight">{g.title[lang]}</span>
+                  <span className="block truncate text-xs text-white/60">{g.tagline[lang]}</span>
+                  <span className="mt-0.5 block text-[11px] text-white/45">
                     {t.arcade.best} {getHighScore(g.id)}
                   </span>
                 </span>
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand px-3.5 py-2 text-sm font-bold text-white shadow-lg">
-                  ▶ {t.arcade.play}
-                </span>
+                <span className={playPill}>▶ {t.arcade.play}</span>
               </button>
             ))}
           </div>
@@ -419,19 +421,21 @@ export function ArcadeShell({
       {screen === 'over' && result && (
         <div className={overClass}>
           <p className="text-3xl">💦</p>
-          <p className="text-2xl font-extrabold">{t.arcade.gameOver}</p>
-          <p className="-mt-2 text-sm text-white/70">{t.arcade.drownTagline}</p>
-          <div>
-            <p className="text-sm text-white/70">{t.arcade.score}</p>
-            <p className="text-4xl font-extrabold tabular-nums">{result.score}</p>
-            <p className="mt-1 text-sm text-white/70">
+          <p className="text-2xl font-black tracking-tight">{t.arcade.gameOver}</p>
+          <p className="-mt-2 text-sm text-white/60">{t.arcade.drownTagline}</p>
+          <div className={`${glass} w-full max-w-xs px-6 py-5`}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/50">{t.arcade.score}</p>
+            <p className="bg-gradient-to-b from-white to-emerald-200 bg-clip-text text-7xl font-black tabular-nums text-transparent drop-shadow-[0_4px_20px_rgba(29,158,117,0.5)]">
+              {result.score}
+            </p>
+            <p className="mt-1 text-sm text-white/60">
               {result.isRecord ? `🏆 ${t.arcade.newRecord}` : `${t.arcade.best}: ${result.high}`}
             </p>
           </div>
           {result.lines.length > 0 && (
             <div className="flex flex-wrap justify-center gap-2">
               {result.lines.map((l, i) => (
-                <span key={i} className="rounded-full bg-white/10 px-3 py-1 text-sm">
+                <span key={i} className={`${glassSoft} px-3 py-1 text-sm`}>
                   <span className="text-white/60">{l.label} </span>
                   <span className="font-semibold tabular-nums">{l.value}</span>
                 </span>
@@ -449,14 +453,14 @@ export function ArcadeShell({
             <button
               type="button"
               onClick={() => startGame('ponthop')}
-              className="rounded-2xl bg-white px-4 py-3 font-semibold text-brand-dark transition hover:bg-white/90"
+              className="rounded-2xl bg-gradient-to-r from-emerald-400 to-brand px-4 py-3.5 font-extrabold text-white shadow-[0_12px_34px_-8px_rgba(29,158,117,0.85)] transition active:scale-[0.99]"
             >
               🔁 {t.arcade.tryAgain}
             </button>
             <button
               type="button"
               onClick={backToMenu}
-              className="rounded-2xl bg-white/10 px-4 py-3 font-semibold transition hover:bg-white/20"
+              className="rounded-2xl bg-white/[0.06] px-4 py-3 font-semibold ring-1 ring-white/10 backdrop-blur-md transition hover:bg-white/10"
             >
               {t.arcade.menu}
             </button>

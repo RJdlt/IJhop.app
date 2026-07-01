@@ -1,4 +1,5 @@
 import { getChallengeState } from './games/ponthop/challenge'
+import { glassSoft } from './ui'
 
 /**
  * Kaartje in het arcade-menu met de dagelijkse uitdaging plus streak. Leest de
@@ -17,7 +18,7 @@ export function DailyChallenge() {
 
   return (
     <div className="w-full max-w-xs text-left">
-      <div className="rounded-2xl bg-white/10 p-3">
+      <div className={`${glassSoft} p-3.5`}>
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-white/60">
             🎯 Uitdaging van vandaag
