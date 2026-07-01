@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useI18n } from '../i18n/i18n'
 import { useGeolocation } from '../hooks/useGeolocation'
 import { formatDistance, pierDistances, travelSeconds, type TravelMode } from '../lib/geo'
-import { CONNECTIONS, firstCatchable, LINES } from '../lib/schedule'
+import { CONNECTIONS, firstCatchable, LINES, STOPS } from '../lib/schedule'
 import { relativeLabel } from '../lib/format'
 import { CheckIcon, LocationIcon } from './icons'
 
@@ -98,7 +98,7 @@ export function CatchPanel({ nowSecondOfWeek }: CatchPanelProps) {
           <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 dark:bg-white/5">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">{t.nearestPier}</p>
-              <p className="font-bold">{t.stopNames[nearest.stop]}</p>
+              <p className="font-bold">{STOPS[nearest.stop]?.name ?? nearest.stop}</p>
             </div>
             <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300">
               <span>{MODE_EMOJI[mode]}</span>
@@ -122,7 +122,7 @@ export function CatchPanel({ nowSecondOfWeek }: CatchPanelProps) {
                     <span className="pill text-white" style={{ backgroundColor: color }}>
                       {c.line}
                     </span>
-                    <span className="text-sm font-semibold">{t.stopNames[c.to]}</span>
+                    <span className="text-sm font-semibold">{STOPS[c.to]?.name ?? c.to}</span>
                   </div>
                   {dep ? (
                     <div className="text-right">

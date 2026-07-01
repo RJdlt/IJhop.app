@@ -9,13 +9,17 @@ export const LINES = timetable.lines
 
 export type StopPair = { from: StopId; to: StopId; line: LineId }
 
-/** The four directed connections this app covers. */
-export const CONNECTIONS: StopPair[] = [
-  { from: 'ndsm', to: 'centraal', line: 'F4' },
-  { from: 'centraal', to: 'ndsm', line: 'F4' },
-  { from: 'ndsm', to: 'pontsteiger', line: 'F7' },
-  { from: 'pontsteiger', to: 'ndsm', line: 'F7' },
-]
+/** Alle gerichte verbindingen, afgeleid uit de lijnen (beide richtingen). */
+export const CONNECTIONS: StopPair[] = Object.values(LINES).flatMap((l) => {
+  const [a, b] = l.connects
+  return [
+    { from: a, to: b, line: l.name },
+    { from: b, to: a, line: l.name },
+  ]
+})
+
+/** Lijn-ids in dienstregeling-volgorde (F1, F2, …). */
+export const LINE_IDS: LineId[] = Object.keys(LINES)
 
 /** A scheduled sailing placed on the absolute week ring (second-of-week it departs). */
 interface RingDeparture extends Departure {

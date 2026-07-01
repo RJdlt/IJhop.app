@@ -1,5 +1,7 @@
-export type StopId = 'ndsm' | 'centraal' | 'pontsteiger'
-export type LineId = 'F4' | 'F7'
+// Data-gedreven: de haltes en lijnen komen uit de dienstregeling (alle GVB-
+// pontjes van Amsterdam), dus geen vaste unie meer.
+export type StopId = string
+export type LineId = string
 
 export interface TimetableStop {
   gtfsId: string

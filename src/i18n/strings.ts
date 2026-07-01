@@ -15,6 +15,8 @@ export interface Strings {
   sec: string
   crossing: string
   swapDirection: string
+  favorite: string
+  otherFerries: string
   to: string
   from: string
   noDepartures: string
@@ -118,6 +120,8 @@ export const STRINGS: Record<Lang, Strings> = {
     sec: 'sec',
     crossing: 'overtocht',
     swapDirection: 'Draai richting om',
+    favorite: 'Favoriet',
+    otherFerries: 'Andere pontjes',
     to: 'naar',
     from: 'vanaf',
     noDepartures: 'Geen afvaarten gevonden.',
@@ -221,6 +225,8 @@ export const STRINGS: Record<Lang, Strings> = {
     sec: 'sec',
     crossing: 'crossing',
     swapDirection: 'Swap direction',
+    favorite: 'Favourite',
+    otherFerries: 'Other ferries',
     to: 'to',
     from: 'from',
     noDepartures: 'No departures found.',

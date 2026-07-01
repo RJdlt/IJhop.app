@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Header } from './components/Header'
 import { RouteCard } from './components/RouteCard'
 import { CatchPanel } from './components/CatchPanel'
@@ -21,21 +21,23 @@ import { startAnalytics, track } from './lib/analytics'
 import { useI18n } from './i18n/i18n'
 import { amsterdamMoment } from './lib/time'
 import { clockCountdown } from './lib/format'
-import { CONNECTIONS, nextDepartures } from './lib/schedule'
+import { CONNECTIONS, LINES, LINE_IDS, STOPS, nextDepartures } from './lib/schedule'
 import type { StopPair } from './lib/schedule'
 import type { LineId } from './types'
 
-// Each line starts on its "headline" direction; the swap button flips it.
-const DIRECTIONS: Record<LineId, [StopPair, StopPair]> = {
-  F4: [
-    { from: 'ndsm', to: 'centraal', line: 'F4' },
-    { from: 'centraal', to: 'ndsm', line: 'F4' },
-  ],
-  F7: [
-    { from: 'ndsm', to: 'pontsteiger', line: 'F7' },
-    { from: 'pontsteiger', to: 'ndsm', line: 'F7' },
-  ],
-}
+// Elke lijn heeft een "kop"-richting (connects[0] -> connects[1]) plus de omgekeerde;
+// de wissel-knop flipt ertussen. Data-gedreven uit de dienstregeling.
+const DIRECTIONS: Record<LineId, [StopPair, StopPair]> = Object.fromEntries(
+  Object.values(LINES).map((l) => {
+    const [a, b] = l.connects
+    return [l.name, [
+      { from: a, to: b, line: l.name },
+      { from: b, to: a, line: l.name },
+    ]]
+  }),
+)
+
+const FAV_KEY = 'ijhop:favlines'
 
 // Onder deze grens toont het spel een opvallender (maar niet-blokkerend) tikje.
 const SOON_SECONDS = 60
@@ -68,8 +70,37 @@ export default function App() {
     track('tab_view', { view })
   }, [view])
 
-  const [flipped, setFlipped] = useState<Record<LineId, boolean>>({ F4: false, F7: false })
+  const [flipped, setFlipped] = useState<Record<LineId, boolean>>(() =>
+    Object.fromEntries(LINE_IDS.map((l) => [l, false])),
+  )
   const swap = (line: LineId) => setFlipped((f) => ({ ...f, [line]: !f[line] }))
+
+  // Favoriete pontjes (staan bovenaan). Onthouden per browser.
+  const [favs, setFavs] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]') as string[])
+    } catch {
+      return new Set()
+    }
+  })
+  const toggleFav = (line: string) =>
+    setFavs((prev) => {
+      const next = new Set(prev)
+      if (next.has(line)) next.delete(line)
+      else next.add(line)
+      try {
+        localStorage.setItem(FAV_KEY, JSON.stringify([...next]))
+      } catch {
+        /* faal stil */
+      }
+      return next
+    })
+  // Favorieten eerst, daarna de rest in dienstregeling-volgorde (stabiel).
+  const orderedLines = useMemo(
+    () => [...LINE_IDS].sort((a, b) => (favs.has(b) ? 1 : 0) - (favs.has(a) ? 1 : 0)),
+    [favs],
+  )
+  const hasFavSplit = favs.size > 0 && favs.size < LINE_IDS.length
 
   // Welke pont de speler bewust afwacht (null = alleen spelen, nooit pauzeren).
   const [watchKey, setWatchKey] = useState<string | null>(
@@ -111,7 +142,7 @@ export default function App() {
           watchedSecs < SOON_SECONDS ? 'bg-amber-400 text-amber-950' : 'bg-black/40 text-white'
         }`}
       >
-        🚤 {watched.line} → {t.stopNames[watched.to]} · {clockCountdown(watchedSecs)}
+        🚤 {watched.line} → {STOPS[watched.to]?.name ?? watched.to} · {clockCountdown(watchedSecs)}
         {watchedSecs < SOON_SECONDS ? ` — ${t.arcade.ferryLeaves}` : ''}
       </span>
     ) : null
@@ -138,7 +169,7 @@ export default function App() {
       const departSow = Math.floor(nowSecondOfWeek + watchedSecs)
       setActiveCrossing({
         room: `${watched.key}@${departSow}`,
-        label: `${watched.line} → ${t.stopNames[watched.to]}`,
+        label: `${watched.line} → ${STOPS[watched.to]?.name ?? watched.to}`,
         untilMs: nowMs + watchedSecs * 1000 + CROSSING_RIDE_MS,
       })
     }
@@ -173,16 +204,26 @@ export default function App() {
 
         {view === 'ferries' ? (
           <main className="flex flex-col gap-4">
-            {(Object.keys(DIRECTIONS) as LineId[]).map((line) => {
+            {orderedLines.map((line, i) => {
               const connection = DIRECTIONS[line][flipped[line] ? 1 : 0]
+              const isFav = favs.has(line)
+              const showOtherHeader = hasFavSplit && !isFav && favs.has(orderedLines[i - 1] ?? '')
               return (
-                <RouteCard
-                  key={line}
-                  connection={connection}
-                  nowSecondOfWeek={nowSecondOfWeek}
-                  userId={userId}
-                  onSwap={() => swap(line)}
-                />
+                <Fragment key={line}>
+                  {showOtherHeader && (
+                    <p className="px-1 pt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                      {t.otherFerries}
+                    </p>
+                  )}
+                  <RouteCard
+                    connection={connection}
+                    nowSecondOfWeek={nowSecondOfWeek}
+                    userId={userId}
+                    onSwap={() => swap(line)}
+                    favorite={isFav}
+                    onToggleFav={() => toggleFav(line)}
+                  />
+                </Fragment>
               )
             })}
 

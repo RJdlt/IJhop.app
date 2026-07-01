@@ -1,6 +1,6 @@
 import { useI18n } from '../i18n/i18n'
 import { clockCountdown } from '../lib/format'
-import { LINES } from '../lib/schedule'
+import { LINES, STOPS } from '../lib/schedule'
 import type { LineId, StopId } from '../types'
 
 export interface FerryOption {
@@ -50,10 +50,10 @@ export function FerryPicker({ options, value, onChange }: FerryPickerProps) {
               </span>
               <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate text-xs font-semibold text-white">
-                  → {t.stopNames[o.to]}
+                  → {STOPS[o.to]?.name ?? o.to}
                 </span>
                 <span className="block truncate text-[11px] text-white/60">
-                  {t.from} {t.stopNames[o.from]}
+                  {t.from} {STOPS[o.from]?.name ?? o.from}
                 </span>
                 <span className="block tabular-nums text-[11px] text-white/70">
                   {o.secondsUntil != null ? clockCountdown(o.secondsUntil) : '–'}

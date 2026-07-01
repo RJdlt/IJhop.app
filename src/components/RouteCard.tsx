@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useI18n } from '../i18n/i18n'
 import { clockCountdown, relativeLabel } from '../lib/format'
-import { LINES, nextDepartures } from '../lib/schedule'
+import { LINES, STOPS, nextDepartures } from '../lib/schedule'
 import type { StopPair } from '../lib/schedule'
 import { getNickname } from '../lib/nickname'
 import { roomKeyFor, duelChannelFor } from '../lib/rooms'
@@ -14,9 +14,11 @@ interface RouteCardProps {
   nowSecondOfWeek: number
   userId: string | null
   onSwap: () => void
+  favorite?: boolean
+  onToggleFav?: () => void
 }
 
-export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap }: RouteCardProps) {
+export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap, favorite, onToggleFav }: RouteCardProps) {
   const { t, lang } = useI18n()
   const { from, to, line } = connection
   const color = LINES[line].color
@@ -40,20 +42,36 @@ export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap }: Route
             {line}
           </span>
           <div className="flex items-center gap-1.5 text-sm font-semibold">
-            <span>{t.stopNames[from]}</span>
+            <span>{STOPS[from]?.name ?? from}</span>
             <span className="text-slate-400">→</span>
-            <span>{t.stopNames[to]}</span>
+            <span>{STOPS[to]?.name ?? to}</span>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onSwap}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800 dark:border-white/10 dark:hover:bg-white/5 dark:hover:text-white"
-          aria-label={t.swapDirection}
-          title={t.swapDirection}
-        >
-          <SwapIcon className="h-4.5 w-4.5" />
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {onToggleFav && (
+            <button
+              type="button"
+              onClick={onToggleFav}
+              aria-pressed={favorite}
+              aria-label={t.favorite}
+              title={t.favorite}
+              className={`grid h-9 w-9 place-items-center rounded-full text-lg transition ${
+                favorite ? 'text-amber-400' : 'text-slate-300 hover:text-slate-400 dark:text-slate-600'
+              }`}
+            >
+              {favorite ? '★' : '☆'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onSwap}
+            className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800 dark:border-white/10 dark:hover:bg-white/5 dark:hover:text-white"
+            aria-label={t.swapDirection}
+            title={t.swapDirection}
+          >
+            <SwapIcon className="h-4.5 w-4.5" />
+          </button>
+        </div>
       </div>
 
       {/* Headline next departure */}

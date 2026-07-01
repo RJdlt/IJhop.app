@@ -2,11 +2,10 @@
 """
 Regenerate src/data/timetable.json from the official Dutch GTFS feed.
 
-The app only needs the two IJ-ferry lines that cross between NDSM and the south
-bank, so this script downloads the national GTFS, keeps just GVB lines F4 and
-F7, and distils a *weekly recurring pattern* (one representative date per
-weekday) into a compact JSON. That keeps the bundle tiny and the schedule
-stable across the months a feed covers.
+Keeps every GVB ferry line that runs *within Amsterdam* (both stops in Amsterdam),
+so F1, F2, F3, F4, F6, F7 and F9, and distils a weekly recurring pattern (one
+representative date per weekday) into a compact JSON. Stops outside Amsterdam
+(e.g. Zaandam, Assendelft, Velsen ferries) are left out on purpose.
 
 Usage:
     python3 scripts/generate-timetable.py
@@ -14,37 +13,22 @@ Usage:
 Re-run whenever GVB publishes a new timetable (e.g. seasonal changes).
 """
 from __future__ import annotations
-
-import csv
-import datetime
-import io
-import json
-import os
-import sys
-import urllib.request
-import zipfile
+import csv, io, json, os, re, sys, datetime, urllib.request, zipfile
 from collections import defaultdict
 
-GTFS_URL = "http://gtfs.ovapi.nl/nl/gtfs-nl.zip"
+GTFS_URL = "https://gtfs.ovapi.nl/nl/gtfs-nl.zip"
 OUT = os.path.join(os.path.dirname(__file__), "..", "src", "data", "timetable.json")
 
-# GVB ferry route short names we care about and the stops they connect.
-WANTED_LINES = {"F4", "F7"}
-STOP_IDS = {  # GTFS stop_id -> our short key
-    "3980786": "ndsm",
-    "3980457": "centraal",
-    "3980046": "pontsteiger",
-}
-STOP_NAMES = {"ndsm": "NDSM-werf", "centraal": "Centraal Station", "pontsteiger": "Pontsteiger"}
-LINE_META = {
-    "F4": {"connects": ["ndsm", "centraal"], "color": "#E2231A", "durationMin": 13},
-    "F7": {"connects": ["ndsm", "pontsteiger"], "color": "#009DE0", "durationMin": 5},
+# Curated, distinct colours per line (F4 red, F7 blue as the app has always shown).
+LINE_COLOR = {
+    "F1": "#1D9E75", "F2": "#00A0C6", "F3": "#F08A24", "F4": "#E2231A",
+    "F6": "#E8909A", "F7": "#009DE0", "F9": "#7C3AED",
 }
 
 
-def read_csv(zf: zipfile.ZipFile, name: str):
+def rows(zf: zipfile.ZipFile, name: str):
     with zf.open(name) as fh:
-        yield from csv.DictReader(io.TextIOWrapper(fh, encoding="utf-8-sig"))
+        yield from csv.reader(io.TextIOWrapper(fh, encoding="utf-8-sig"))
 
 
 def to_minutes(t: str) -> int:
@@ -52,104 +36,116 @@ def to_minutes(t: str) -> int:
     return int(h) * 60 + int(m)
 
 
+def slug(name: str) -> str:
+    s = name.lower()
+    for a, b in [("é", "e"), ("è", "e"), ("ï", "i"), ("ë", "e"), ("ö", "o"), ("ü", "u"), ("á", "a")]:
+        s = s.replace(a, b)
+    s = re.sub(r"[^a-z0-9]+", "", s)
+    return s[9:] if s.startswith("amsterdam") else s
+
+
+def col(header):
+    return {c: i for i, c in enumerate(header)}
+
+
 def main() -> int:
-    print(f"Downloading {GTFS_URL} (~240 MB)…", file=sys.stderr)
-    data = urllib.request.urlopen(GTFS_URL, timeout=600).read()
-    zf = zipfile.ZipFile(io.BytesIO(data))
+    print(f"Downloading {GTFS_URL} (~225 MB)…", file=sys.stderr)
+    zf = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(GTFS_URL, timeout=900).read()))
 
-    # routes -> ferry route_ids
-    route_line = {
-        r["route_id"]: r["route_short_name"]
-        for r in read_csv(zf, "routes.txt")
-        if r.get("agency_id") == "GVB"
-        and r.get("route_type") == "4"
-        and r["route_short_name"] in WANTED_LINES
+    it = rows(zf, "routes.txt"); H = col(next(it))
+    routes = {
+        r[H["route_id"]]: r[H["route_short_name"]]
+        for r in it
+        if r[H["route_type"]] == "4" and "agency_id" in H and r[H["agency_id"]] == "GVB"
     }
-
-    # trips on those routes
-    trips = {}
-    ferry_services = set()
-    for r in read_csv(zf, "trips.txt"):
-        if r["route_id"] in route_line:
-            trips[r["trip_id"]] = {"line": route_line[r["route_id"]], "svc": r["service_id"]}
-            ferry_services.add(r["service_id"])
+    it = rows(zf, "trips.txt"); H = col(next(it))
+    trips, svcs = {}, set()
+    for r in it:
+        rid = r[H["route_id"]]
+        if rid in routes:
+            trips[r[H["trip_id"]]] = {"line": routes[rid], "svc": r[H["service_id"]]}
+            svcs.add(r[H["service_id"]])
     trip_ids = set(trips)
 
-    # stop_times for those trips (origin = seq 1, destination = seq 2)
-    st = defaultdict(dict)
-    for r in read_csv(zf, "stop_times.txt"):
-        if r["trip_id"] in trip_ids:
-            st[r["trip_id"]][int(r["stop_sequence"])] = (
-                r["stop_id"],
-                to_minutes(r["arrival_time"]),
-                to_minutes(r["departure_time"]),
-            )
+    print("Scanning stop_times…", file=sys.stderr)
+    seqs = defaultdict(list)
+    it = rows(zf, "stop_times.txt"); H = col(next(it))
+    ti, ss, si, ai, di = H["trip_id"], H["stop_sequence"], H["stop_id"], H["arrival_time"], H["departure_time"]
+    for r in it:
+        if r[ti] in trip_ids:
+            seqs[r[ti]].append((int(r[ss]), r[si], to_minutes(r[ai]), to_minutes(r[di])))
+    trip_od, used = {}, set()
+    for tid, rs in seqs.items():
+        rs.sort()
+        trip_od[tid] = (rs[0][1], rs[0][3], rs[-1][1], rs[-1][2])
+        used.add(rs[0][1]); used.add(rs[-1][1])
 
-    # service_id -> active dates (this feed uses calendar_dates only)
+    it = rows(zf, "stops.txt"); H = col(next(it))
+    info = {}
+    for r in it:
+        if r[H["stop_id"]] in used:
+            info[r[H["stop_id"]]] = {"name": r[H["stop_name"]], "lat": float(r[H["stop_lat"]]), "lon": float(r[H["stop_lon"]])}
+    is_ams = lambda sid: info[sid]["name"].startswith("Amsterdam")
+    disp = lambda sid: info[sid]["name"].replace("Amsterdam, ", "")
+    key = {s: slug(info[s]["name"]) for s in used}
+
+    it = rows(zf, "calendar_dates.txt"); H = col(next(it))
     svc_dates = defaultdict(set)
-    for r in read_csv(zf, "calendar_dates.txt"):
-        if r["service_id"] in ferry_services and r["exception_type"] == "1":
-            svc_dates[r["service_id"]].add(r["date"])
-
-    # pick the first full Mon–Sun week that every weekday can be represented in
+    for r in it:
+        if r[H["service_id"]] in svcs and r[H["exception_type"]] == "1":
+            svc_dates[r[H["service_id"]]].add(r[H["date"]])
     all_dates = sorted({d for ds in svc_dates.values() for d in ds})
     start = datetime.datetime.strptime(all_dates[0], "%Y%m%d").date()
     monday = start + datetime.timedelta(days=(7 - start.weekday()) % 7)
     rep = {wd: (monday + datetime.timedelta(days=wd)).strftime("%Y%m%d") for wd in range(7)}
 
-    schedule = {}
+    schedule, used_ams, lines_seen = {}, set(), set()
     for wd, date in rep.items():
-        active = {s for s in ferry_services if date in svc_dates.get(s, ())}
+        active = {s for s in svcs if date in svc_dates.get(s, ())}
         deps = []
         for tid, t in trips.items():
             if t["svc"] not in active:
                 continue
-            stops = st.get(tid)
-            if not stops or 1 not in stops or 2 not in stops:
+            od = trip_od.get(tid)
+            if not od:
                 continue
-            o_sid, _, o_dep = stops[1]
-            d_sid, d_arr, _ = stops[2]
-            origin, dest = STOP_IDS.get(o_sid), STOP_IDS.get(d_sid)
-            if not origin or not dest:
+            o_sid, o_dep, d_sid, d_arr = od
+            if not (is_ams(o_sid) and is_ams(d_sid)):
                 continue
-            deps.append(
-                {
-                    "line": t["line"],
-                    "from": origin,
-                    "to": dest,
-                    "m": o_dep,
-                    "dep": f"{(o_dep % 1440) // 60:02d}:{(o_dep % 1440) % 60:02d}",
-                    "dur": d_arr - o_dep,
-                }
-            )
+            o, d = key[o_sid], key[d_sid]
+            if o == d:
+                continue
+            used_ams.add(o_sid); used_ams.add(d_sid); lines_seen.add(t["line"])
+            deps.append({"line": t["line"], "from": o, "to": d, "m": o_dep,
+                         "dep": f"{(o_dep % 1440) // 60:02d}:{(o_dep % 1440) % 60:02d}", "dur": d_arr - o_dep})
         deps.sort(key=lambda x: (x["m"], x["from"], x["line"]))
         schedule[str(wd)] = deps
 
-    stop_meta = {}
-    stops_seen = {r["stop_id"]: r for r in read_csv(zf, "stops.txt") if r["stop_id"] in STOP_IDS}
-    for sid, key in STOP_IDS.items():
-        r = stops_seen[sid]
-        stop_meta[key] = {
-            "gtfsId": sid,
-            "name": STOP_NAMES[key],
-            "lat": float(r["stop_lat"]),
-            "lon": float(r["stop_lon"]),
-        }
+    pairs, durs = defaultdict(list), defaultdict(list)
+    for wd in schedule.values():
+        for d in wd:
+            for s in (d["from"], d["to"]):
+                if s not in pairs[d["line"]]:
+                    pairs[d["line"]].append(s)
+            durs[d["line"]].append(d["dur"])
+    lines = {}
+    for ln in sorted(lines_seen):
+        ds = sorted(durs[ln]); md = ds[len(ds) // 2] if ds else 0
+        lines[ln] = {"name": ln, "connects": pairs[ln][:2], "color": LINE_COLOR.get(ln, "#1D9E75"), "durationMin": md}
 
+    stops_out = {key[s]: {"gtfsId": s, "name": disp(s), "lat": info[s]["lat"], "lon": info[s]["lon"]} for s in used_ams}
     out = {
         "source": "GVB GTFS (gtfs.ovapi.nl/nl)",
         "generated": datetime.date.today().isoformat(),
         "note": "Weekly recurring pattern. m = minutes since midnight of service day "
-        "(can exceed 1440 for after-midnight sailings; real minute-of-week = weekday*1440 + m).",
+                "(can exceed 1440 for after-midnight sailings; real minute-of-week = weekday*1440 + m).",
         "timezone": "Europe/Amsterdam",
-        "stops": stop_meta,
-        "lines": {ln: {"name": ln, **LINE_META[ln]} for ln in WANTED_LINES},
-        "schedule": schedule,
+        "stops": stops_out, "lines": lines, "schedule": schedule,
     }
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(out, fh, ensure_ascii=False, separators=(",", ":"))
     total = sum(len(v) for v in schedule.values())
-    print(f"Wrote {os.path.relpath(OUT)} — {total} sailings across the week.", file=sys.stderr)
+    print(f"Wrote {os.path.relpath(OUT)} — {len(lines)} lines, {len(stops_out)} stops, {total} sailings/week.", file=sys.stderr)
     return 0
 
 
