@@ -298,9 +298,14 @@ export function ArcadeShell({
   // Spelletjes-tab ('page'): menu/over stromen als gewone pagina-inhoud, alleen
   // tijdens het spelen een vast groot speelveld. Snack-overlay ('fill'): vaste
   // hoogte met intern scrollend menu.
-  const rootClass = `relative w-full overflow-hidden rounded-3xl bg-brand-dark ${
-    pageMode ? (screen === 'playing' ? 'h-[78dvh] min-h-[420px]' : '') : 'h-full'
-  }`
+  // Tijdens het spelen (Spelletjes-tab): een vaste, schermvullende laag zodat het
+  // beeld niet meescrollt. Menu/over stromen gewoon als pagina-inhoud.
+  const rootClass =
+    pageMode && screen === 'playing'
+      ? 'fixed inset-0 z-40 overflow-hidden bg-brand-dark'
+      : pageMode
+        ? 'relative w-full overflow-hidden rounded-3xl bg-brand-dark'
+        : 'relative h-full w-full overflow-hidden rounded-3xl bg-brand-dark'
   const panelBase = `flex w-full flex-col items-center gap-5 ${arcadeBg} px-6 py-8 text-center text-white`
   const menuClass = pageMode
     ? `relative ${panelBase}`
@@ -315,7 +320,7 @@ export function ArcadeShell({
 
       {/* Topbalk: in-game HUD (score, geluid, sluiten) */}
       {screen === 'playing' && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3">
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
           <span className="pointer-events-auto rounded-full bg-black/30 px-3 py-1 text-sm font-semibold tabular-nums text-white backdrop-blur">
             {t.arcade.score}: {score}
           </span>
