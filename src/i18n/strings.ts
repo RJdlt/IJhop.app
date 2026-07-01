@@ -28,6 +28,10 @@ export interface Strings {
   nearestPier: string
   walkTime: string
   away: string
+  travelBy: string
+  modeWalk: string
+  modeBike: string
+  modeScooter: string
   canMake: string
   cannotMake: string
   leaveNow: string
@@ -126,6 +130,10 @@ export const STRINGS: Record<Lang, Strings> = {
     nearestPier: 'Dichtstbijzijnde pont',
     walkTime: 'looptijd',
     away: 'lopen',
+    travelBy: 'Hoe ga je?',
+    modeWalk: 'Lopen',
+    modeBike: 'Fiets',
+    modeScooter: 'Scooter',
     canMake: 'Je haalt het',
     cannotMake: 'Net te laat',
     leaveNow: 'Vertrek nu',
@@ -225,6 +233,10 @@ export const STRINGS: Record<Lang, Strings> = {
     nearestPier: 'Nearest pier',
     walkTime: 'walk',
     away: 'away',
+    travelBy: 'How do you go?',
+    modeWalk: 'Walk',
+    modeBike: 'Bike',
+    modeScooter: 'Scooter',
     canMake: "You'll make it",
     cannotMake: 'Just missed',
     leaveNow: 'Leave now',

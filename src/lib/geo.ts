@@ -4,6 +4,21 @@ import { STOPS } from './schedule'
 /** Comfortable average walking speed in metres per second (~5 km/h). */
 export const WALK_SPEED_MPS = 1.35
 
+/** Hoe je naar de pont gaat. Bepaalt de reistijd-schatting. */
+export type TravelMode = 'lopen' | 'fiets' | 'scooter'
+
+/** Gemiddelde snelheden per vervoerwijze (m/s). Fiets ~15 km/h, scooter ~25 km/h. */
+export const TRAVEL_SPEED_MPS: Record<TravelMode, number> = {
+  lopen: WALK_SPEED_MPS,
+  fiets: 4.2,
+  scooter: 7.0,
+}
+
+/** Geschatte reistijd (seconden) over een afstand, per vervoerwijze. */
+export function travelSeconds(meters: number, mode: TravelMode): number {
+  return Math.round(meters / TRAVEL_SPEED_MPS[mode])
+}
+
 export interface Coords {
   lat: number
   lon: number

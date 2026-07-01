@@ -1,9 +1,14 @@
+import { useState } from 'react'
 import { useI18n } from '../i18n/i18n'
 import { useGeolocation } from '../hooks/useGeolocation'
-import { formatDistance, pierDistances } from '../lib/geo'
+import { formatDistance, pierDistances, travelSeconds, type TravelMode } from '../lib/geo'
 import { CONNECTIONS, firstCatchable, LINES } from '../lib/schedule'
 import { relativeLabel } from '../lib/format'
-import { CheckIcon, LocationIcon, WalkIcon } from './icons'
+import { CheckIcon, LocationIcon } from './icons'
+
+const MODE_KEY = 'ijhop:travelmode'
+const MODES: TravelMode[] = ['lopen', 'fiets', 'scooter']
+const MODE_EMOJI: Record<TravelMode, string> = { lopen: '🚶', fiets: '🚲', scooter: '🛵' }
 
 interface CatchPanelProps {
   nowSecondOfWeek: number
@@ -12,9 +17,27 @@ interface CatchPanelProps {
 export function CatchPanel({ nowSecondOfWeek }: CatchPanelProps) {
   const { t, lang } = useI18n()
   const geo = useGeolocation()
+  const [mode, setMode] = useState<TravelMode>(() => {
+    try {
+      const m = localStorage.getItem(MODE_KEY) as TravelMode | null
+      return m && MODES.includes(m) ? m : 'lopen'
+    } catch {
+      return 'lopen'
+    }
+  })
+  const chooseMode = (m: TravelMode) => {
+    setMode(m)
+    try {
+      localStorage.setItem(MODE_KEY, m)
+    } catch {
+      /* faal stil */
+    }
+  }
 
   const nearest = geo.coords ? pierDistances(geo.coords)[0] : null
   const outbound = nearest ? CONNECTIONS.filter((c) => c.from === nearest.stop) : []
+  const travel = nearest ? travelSeconds(nearest.meters, mode) : 0
+  const modeLabel = { lopen: t.modeWalk, fiets: t.modeBike, scooter: t.modeScooter }
 
   return (
     <section className="card animate-riseIn p-5">
@@ -49,23 +72,46 @@ export function CatchPanel({ nowSecondOfWeek }: CatchPanelProps) {
 
       {nearest && (
         <div className="mt-4 space-y-4">
+          {/* Hoe ga je naar de pont? Bepaalt de reistijd-schatting. */}
+          <div>
+            <p className="mb-1.5 text-xs uppercase tracking-wide text-slate-400">{t.travelBy}</p>
+            <div className="flex gap-1.5 rounded-2xl bg-slate-100 p-1 dark:bg-white/5">
+              {MODES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => chooseMode(m)}
+                  aria-pressed={mode === m}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-sm font-semibold transition ${
+                    mode === m
+                      ? 'bg-white text-slate-900 shadow-sm dark:bg-white/15 dark:text-white'
+                      : 'text-slate-500 dark:text-slate-300'
+                  }`}
+                >
+                  <span>{MODE_EMOJI[m]}</span>
+                  {modeLabel[m]}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 dark:bg-white/5">
             <div>
               <p className="text-xs uppercase tracking-wide text-slate-400">{t.nearestPier}</p>
               <p className="font-bold">{t.stopNames[nearest.stop]}</p>
             </div>
             <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-600 dark:text-slate-300">
-              <WalkIcon className="h-4.5 w-4.5 text-slate-400" />
-              {Math.max(1, Math.round(nearest.walkSeconds / 60))} {t.min}
+              <span>{MODE_EMOJI[mode]}</span>
+              {Math.max(1, Math.round(travel / 60))} {t.min}
               <span className="text-slate-400">· {formatDistance(nearest.meters)}</span>
             </div>
           </div>
 
           <ul className="space-y-2.5">
             {outbound.map((c) => {
-              const dep = firstCatchable(c.from, c.to, nowSecondOfWeek, nearest.walkSeconds)
+              const dep = firstCatchable(c.from, c.to, nowSecondOfWeek, travel)
               const color = LINES[c.line].color
-              const leaveIn = dep ? dep.secondsUntil - nearest.walkSeconds : 0
+              const leaveIn = dep ? dep.secondsUntil - travel : 0
               const mustLeaveNow = leaveIn <= 60
               return (
                 <li
