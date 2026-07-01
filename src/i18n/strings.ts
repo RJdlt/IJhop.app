@@ -17,6 +17,10 @@ export interface Strings {
   swapDirection: string
   favorite: string
   otherFerries: string
+  onbTitle: string
+  onbSubtitle: string
+  onbDone: string
+  onbSkip: string
   to: string
   from: string
   noDepartures: string
@@ -122,6 +126,10 @@ export const STRINGS: Record<Lang, Strings> = {
     swapDirection: 'Draai richting om',
     favorite: 'Favoriet',
     otherFerries: 'Andere pontjes',
+    onbTitle: 'Welke pontjes pak je het meest?',
+    onbSubtitle: 'Zet ze als favoriet, dan houden we je scherm overzichtelijk. Aanpassen kan altijd via de ster.',
+    onbDone: 'Klaar',
+    onbSkip: 'Later kiezen',
     to: 'naar',
     from: 'vanaf',
     noDepartures: 'Geen afvaarten gevonden.',
@@ -227,6 +235,10 @@ export const STRINGS: Record<Lang, Strings> = {
     swapDirection: 'Swap direction',
     favorite: 'Favourite',
     otherFerries: 'Other ferries',
+    onbTitle: 'Which ferries do you take most?',
+    onbSubtitle: 'Set them as favourites to keep your screen tidy. You can always change it with the star.',
+    onbDone: 'Done',
+    onbSkip: 'Choose later',
     to: 'to',
     from: 'from',
     noDepartures: 'No departures found.',

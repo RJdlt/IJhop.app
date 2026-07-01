@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Header } from './components/Header'
 import { RouteCard } from './components/RouteCard'
 import { CatchPanel } from './components/CatchPanel'
@@ -8,6 +8,7 @@ import { TabBar } from './components/TabBar'
 import { InstallPrompt } from './components/InstallPrompt'
 import { SponsorCard } from './components/SponsorCard'
 import { OntmoetingCard } from './components/OntmoetingCard'
+import { OnboardingFavorites } from './components/OnboardingFavorites'
 import { FerryPicker } from './components/FerryPicker'
 import type { FerryOption } from './components/FerryPicker'
 import { ArcadeShell } from './arcade/ArcadeShell'
@@ -95,12 +96,26 @@ export default function App() {
       }
       return next
     })
-  // Favorieten eerst, daarna de rest in dienstregeling-volgorde (stabiel).
-  const orderedLines = useMemo(
-    () => [...LINE_IDS].sort((a, b) => (favs.has(b) ? 1 : 0) - (favs.has(a) ? 1 : 0)),
-    [favs],
-  )
-  const hasFavSplit = favs.size > 0 && favs.size < LINE_IDS.length
+  const favLines = useMemo(() => LINE_IDS.filter((l) => favs.has(l)), [favs])
+  const otherLines = useMemo(() => LINE_IDS.filter((l) => !favs.has(l)), [favs])
+  const [showOthers, setShowOthers] = useState(false)
+
+  // Eenmalige favorieten-vraag bij de eerste keer, voor een schoon hoofdscherm.
+  const [onboarded, setOnboarded] = useState(() => {
+    try {
+      return localStorage.getItem('ijhop:onboarded') === '1'
+    } catch {
+      return true
+    }
+  })
+  const finishOnboarding = () => {
+    setOnboarded(true)
+    try {
+      localStorage.setItem('ijhop:onboarded', '1')
+    } catch {
+      /* faal stil */
+    }
+  }
 
   // Welke pont de speler bewust afwacht (null = alleen spelen, nooit pauzeren).
   const [watchKey, setWatchKey] = useState<string | null>(
@@ -197,6 +212,18 @@ export default function App() {
     <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
   )
 
+  const renderRoute = (line: string) => (
+    <RouteCard
+      key={line}
+      connection={DIRECTIONS[line][flipped[line] ? 1 : 0]}
+      nowSecondOfWeek={nowSecondOfWeek}
+      userId={userId}
+      onSwap={() => swap(line)}
+      favorite={favs.has(line)}
+      onToggleFav={() => toggleFav(line)}
+    />
+  )
+
   return (
     <div className="water-bg flex min-h-full flex-col">
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-6">
@@ -204,28 +231,19 @@ export default function App() {
 
         {view === 'ferries' ? (
           <main className="flex flex-col gap-4">
-            {orderedLines.map((line, i) => {
-              const connection = DIRECTIONS[line][flipped[line] ? 1 : 0]
-              const isFav = favs.has(line)
-              const showOtherHeader = hasFavSplit && !isFav && favs.has(orderedLines[i - 1] ?? '')
-              return (
-                <Fragment key={line}>
-                  {showOtherHeader && (
-                    <p className="px-1 pt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      {t.otherFerries}
-                    </p>
-                  )}
-                  <RouteCard
-                    connection={connection}
-                    nowSecondOfWeek={nowSecondOfWeek}
-                    userId={userId}
-                    onSwap={() => swap(line)}
-                    favorite={isFav}
-                    onToggleFav={() => toggleFav(line)}
-                  />
-                </Fragment>
-              )
-            })}
+            {(favLines.length > 0 ? favLines : LINE_IDS).map(renderRoute)}
+            {favLines.length > 0 && otherLines.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowOthers((s) => !s)}
+                  className="self-start rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm ring-1 ring-slate-100 transition hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10"
+                >
+                  {showOthers ? '▲' : '▼'} {t.otherFerries} ({otherLines.length})
+                </button>
+                {showOthers && otherLines.map(renderRoute)}
+              </>
+            )}
 
             {ontmoetingRoom && <OntmoetingCard room={ontmoetingRoom} userId={userId} />}
             <ArcadeSnack
@@ -284,6 +302,10 @@ export default function App() {
             />
           </div>
         </div>
+      )}
+
+      {!onboarded && (
+        <OnboardingFavorites favs={favs} onToggle={toggleFav} onDone={finishOnboarding} />
       )}
 
       {/* Niet-storende update-melding: één tik en je zit op de nieuwste versie. */}
