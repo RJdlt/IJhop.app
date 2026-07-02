@@ -4,31 +4,46 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
 // ---- Types -----------------------------------------------------------------
-interface Overview {
-  users_total: number
-  users_today: number
-  users_7d: number
-  users_30d: number
-  sessions_total: number
-  sessions_today: number
-  events_total: number
-  events_today: number
-  avg_session_sec: number
-  game_overs: number
-  game_starts: number
-  avg_score: number
-  max_score: number
-  active_5m: number
-}
-interface NameCount { name: string; count: number }
+// Eén dashboard-RPC (migratie 0012) levert alles: consistent Europe/Amsterdam,
+// test-events uitgesloten, dagen zonder events als echte nullen.
 interface Daily { day: string; users: number; sessions: number; events: number }
-interface Funnel { sessions: number; snack: number; started: number; finished: number }
-interface Retention { users: number; returning_users: number; returning_rate: number; new_today: number; returning_today: number; dau: number; mau: number }
+interface PropRow { value: string; users: number; events: number }
+interface Dash {
+  quality: {
+    last_event_at: string | null
+    last_real_event_at: string | null
+    events_today: number
+    test_events: number
+    total_events: number
+    own_included: boolean
+  }
+  life: {
+    users_today: number
+    users_7d: number
+    users_30d: number
+    users_total: number
+    sessions_today: number
+    sessions_7d: number
+    sessions_per_user_7d: number | null
+    active_5m: number
+    median_session_sec: number
+    n_dur_sessions: number
+  }
+  window: { days: number; events: number; users: number; sessions: number }
+  daily: Daily[]
+  funnel: { sessions: number; arcade: number; started: number; finished: number }
+  hourly: number[]
+  dow: number[]
+  tabs: PropRow[]
+  ferries: PropRow[]
+  characters: PropRow[]
+  devices: PropRow[]
+}
 interface RecentEvent { name: string; props: Record<string, unknown> | null; path: string | null; created_at: string }
 interface AdminRow { user_id: string; email: string | null; created_at: string }
 interface InviteRow { id: string; email: string; status: string; expires_at: string; used_at: string | null; created_at: string }
 interface EntryRow { id: string; game_id: string; score: number; name: string | null; email: string; created_at: string }
-type Bar = { label: string; value: number }
+type Bar = { label: string; value: number; title?: string }
 
 // ---- Helpers ---------------------------------------------------------------
 const EVENT_META: Record<string, { emoji: string; label: string }> = {
@@ -50,7 +65,6 @@ const EVENT_META: Record<string, { emoji: string; label: string }> = {
 const meta = (n: string) => EVENT_META[n] ?? { emoji: '•', label: n }
 const DOW = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo']
 const nf = (n: number) => (Number.isFinite(n) ? n : 0).toLocaleString('nl-NL')
-const sum = (a: number[]) => a.reduce((x, y) => x + y, 0)
 
 function fmtDuration(sec: number): string {
   const s = Math.round(sec || 0)
@@ -68,7 +82,7 @@ function ago(iso: string): string {
   return `${Math.floor(s / 86400)}d`
 }
 function clock(d: Date | null): string {
-  return d ? d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'
+  return d ? d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'nooit'
 }
 function propSummary(p: Record<string, unknown> | null): string {
   if (!p) return ''
@@ -79,6 +93,8 @@ function propSummary(p: Record<string, unknown> | null): string {
   if ('game' in p) return String(p.game)
   return ''
 }
+const deviceLabel = (v: string) =>
+  v === 'true' ? 'PWA (geïnstalleerd)' : v === 'false' ? 'Browser' : v
 
 // ---- UI bouwstenen ---------------------------------------------------------
 const ACCENTS: Record<string, string> = {
@@ -89,34 +105,28 @@ const ACCENTS: Record<string, string> = {
   rose: 'from-rose-500 to-pink-500',
   slate: 'from-slate-600 to-slate-700',
 }
-function Stat({ emoji, label, value, sub, accent = 'brand', loading }: { emoji: string; label: string; value: ReactNode; sub?: string; accent?: string; loading?: boolean }) {
+function Stat({ emoji, label, value, sub, accent = 'brand' }: { emoji: string; label: string; value: ReactNode; sub?: string; accent?: string }) {
   return (
     <div className="relative overflow-hidden rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
       <div className={`absolute -right-6 -top-6 h-16 w-16 rounded-full bg-gradient-to-br ${ACCENTS[accent] ?? ACCENTS.brand} opacity-15`} />
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400"><span className="mr-1">{emoji}</span>{label}</p>
-      {loading ? <div className="mt-2 h-7 w-16 animate-pulse rounded bg-slate-200" /> : <p className="mt-1 text-3xl font-extrabold tabular-nums text-slate-900">{value}</p>}
-      {sub && !loading && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
+      <p className="mt-1 text-3xl font-extrabold tabular-nums text-slate-900">{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
     </div>
   )
 }
-function Panel({ title, emoji, children }: { title: string; emoji: string; children: ReactNode }) {
+function Panel({ title, emoji, sub, children }: { title: string; emoji: string; sub?: string; children: ReactNode }) {
   return (
     <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-100">
-      <p className="mb-3 text-sm font-bold text-slate-700"><span className="mr-1.5">{emoji}</span>{title}</p>
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <p className="text-sm font-bold text-slate-700"><span className="mr-1.5">{emoji}</span>{title}</p>
+        {sub && <p className="shrink-0 text-[11px] text-slate-400">{sub}</p>}
+      </div>
       {children}
     </div>
   )
 }
-function MiniStat({ label, value, sub }: { label: string; value: ReactNode; sub?: string }) {
-  return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-      <p className="mt-0.5 text-xl font-extrabold tabular-nums text-slate-900">{value}</p>
-      {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
-    </div>
-  )
-}
-function Empty({ text = 'Nog geen data — dit vult zich zodra mensen de app gebruiken.' }: { text?: string }) {
+function Empty({ text = 'Nog geen data. Dit vult zich zodra mensen de app gebruiken.' }: { text?: string }) {
   return (
     <div className="flex flex-col items-center justify-center gap-1 py-6 text-center">
       <span className="text-2xl">📭</span>
@@ -124,13 +134,29 @@ function Empty({ text = 'Nog geen data — dit vult zich zodra mensen de app geb
     </div>
   )
 }
+/** Drempel-poort: onder de minimale steekproef geen lege doos maar een
+ *  compacte voortgangsregel, zodat je groei ziet in plaats van leegte. */
+function Gate({ n, min, unit, children }: { n: number; min: number; unit: string; children: ReactNode }) {
+  if (n < min) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2.5">
+        <span aria-hidden>⏳</span>
+        <p className="text-xs text-slate-500">Nog te weinig data ({nf(n)}/{nf(min)} {unit}).</p>
+        <div className="ml-auto h-1.5 w-24 overflow-hidden rounded-full bg-slate-200">
+          <div className="h-full rounded-full bg-brand" style={{ width: `${Math.min(100, Math.round((n / min) * 100))}%` }} />
+        </div>
+      </div>
+    )
+  }
+  return <>{children}</>
+}
 function BarList({ rows, color = 'bg-brand' }: { rows: Bar[]; color?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.value))
-  if (rows.length === 0 || sum(rows.map((r) => r.value)) === 0) return <Empty />
+  if (rows.length === 0) return <Empty />
   return (
     <div className="flex flex-col gap-1.5">
       {rows.map((r) => (
-        <div key={r.label} className="flex items-center gap-2 text-sm">
+        <div key={r.label} className="flex items-center gap-2 text-sm" title={r.title}>
           <span className="w-28 shrink-0 truncate text-slate-600">{r.label}</span>
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
             <div className={`h-full rounded-full ${color}`} style={{ width: `${(r.value / max) * 100}%` }} />
@@ -141,15 +167,22 @@ function BarList({ rows, color = 'bg-brand' }: { rows: Bar[]; color?: string }) 
     </div>
   )
 }
+/** Kolomgrafiek met pixel-hoogtes (procent-hoogtes in geneste flex breken in
+ *  Safari) en een expliciete max-as, zodat "vol" nooit meer "veel" suggereert. */
+const CHART_H = 104
 function Columns({ data, color = 'bg-brand', labelEvery = 1 }: { data: { label: string; value: number; title?: string }[]; color?: string; labelEvery?: number }) {
   const max = Math.max(1, ...data.map((d) => d.value))
-  if (data.length === 0 || sum(data.map((d) => d.value)) === 0) return <Empty />
+  if (data.length === 0) return <Empty />
   return (
     <div>
-      <div className="flex h-28 items-end gap-[3px]">
+      <p className="mb-1 text-right text-[10px] tabular-nums text-slate-400">max {nf(max)}</p>
+      <div className="flex items-end gap-[3px]" style={{ height: CHART_H }}>
         {data.map((d, i) => (
-          <div key={i} className="flex flex-1 flex-col items-center justify-end" title={d.title ?? `${d.label}: ${nf(d.value)}`}>
-            <div className={`w-full rounded-t ${color}`} style={{ height: `${(d.value / max) * 100}%`, minHeight: d.value > 0 ? 2 : 0 }} />
+          <div key={i} className="flex h-full flex-1 items-end" title={d.title ?? `${d.label}: ${nf(d.value)}`}>
+            <div
+              className={`w-full rounded-t ${d.value > 0 ? color : 'bg-slate-200'}`}
+              style={{ height: d.value > 0 ? Math.max(3, Math.round((d.value / max) * CHART_H)) : 1 }}
+            />
           </div>
         ))}
       </div>
@@ -162,8 +195,8 @@ function Columns({ data, color = 'bg-brand', labelEvery = 1 }: { data: { label: 
 function SkeletonBody() {
   return (
     <>
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {Array.from({ length: 8 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-200/70" />)}
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-200/70" />)}
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-44 animate-pulse rounded-2xl bg-slate-200/70" />)}
@@ -173,44 +206,61 @@ function SkeletonBody() {
 }
 
 // ---- Demo-data (client-side, NIET naar de database) ------------------------
-function makeDemo(days: number) {
+function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: EntryRow[] } {
   const rnd = (a: number, b: number) => Math.floor(a + Math.random() * (b - a))
   const today = new Date()
   const daily: Daily[] = Array.from({ length: days }, (_, i) => {
     const d = new Date(today)
     d.setDate(d.getDate() - (days - 1 - i))
     const isWeekend = ((d.getDay() + 6) % 7) >= 5
-    const growth = 1 + (i / Math.max(1, days - 1)) * 1.8 // loopt op over de tijd
+    const growth = 1 + (i / Math.max(1, days - 1)) * 1.8
     const noise = 0.82 + Math.random() * 0.36
-    const events = Math.round(80 * growth * (isWeekend ? 1.35 : 1) * noise)
-    const sessions = Math.max(1, Math.round(events / rnd(7, 11)))
-    const users = Math.max(1, Math.round(sessions * (0.6 + Math.random() * 0.2)))
+    const users = Math.max(1, Math.round(14 * growth * (isWeekend ? 1.35 : 1) * noise))
+    const sessions = Math.round(users * (1.1 + Math.random() * 0.4))
+    const events = sessions * rnd(6, 11)
     return { day: d.toISOString().slice(0, 10), users, sessions, events }
   })
   const hourly = Array.from({ length: 24 }, (_, h) =>
-    (h >= 7 && h <= 9) || (h >= 16 && h <= 18) ? rnd(300, 600) : h >= 1 && h <= 5 ? rnd(2, 30) : rnd(60, 220),
+    (h >= 7 && h <= 9) || (h >= 16 && h <= 18) ? rnd(60, 140) : h >= 1 && h <= 5 ? rnd(0, 6) : rnd(10, 50),
   )
-  const dow = [820, 760, 790, 810, 940, 1180, 1020].map((v) => v + rnd(-80, 80))
-  const byName: NameCount[] = [
-    ['heartbeat', 3200], ['tab_view', 1240], ['ferry_pick', 900], ['app_visible', 700], ['snack_open', 680],
-    ['game_start', 610], ['game_over', 540], ['session_start', 420], ['character_select', 150],
-  ].map(([n, c]) => ({ name: n as string, count: c as number }))
-  const overview: Overview = {
-    users_total: 1240, users_today: 38, users_7d: 210, users_30d: 640, sessions_total: 2100, sessions_today: 52,
-    events_total: 18450, events_today: 430, avg_session_sec: 96, game_overs: 540, game_starts: 610,
-    avg_score: 46.8, max_score: 132, active_5m: 6,
+  const dow = [120, 116, 122, 128, 150, 188, 162].map((v) => v + rnd(-14, 14))
+  const dash: Dash = {
+    quality: {
+      last_event_at: new Date(Date.now() - 40_000).toISOString(),
+      last_real_event_at: new Date(Date.now() - 40_000).toISOString(),
+      events_today: 430, test_events: 0, total_events: 18450, own_included: false,
+    },
+    life: {
+      users_today: 38, users_7d: 210, users_30d: 640, users_total: 1240,
+      sessions_today: 52, sessions_7d: 290, sessions_per_user_7d: 1.38,
+      active_5m: 6, median_session_sec: 96, n_dur_sessions: 240,
+    },
+    window: { days, events: 18450, users: 640, sessions: 900 },
+    daily,
+    funnel: { sessions: 900, arcade: 520, started: 410, finished: 330 },
+    hourly, dow,
+    tabs: [
+      { value: 'ferries', users: 520, events: 1400 },
+      { value: 'arcade', users: 310, events: 700 },
+    ],
+    ferries: [
+      { value: 'F4:ndsm:centraal', users: 180, events: 340 },
+      { value: 'F7:ndsm:pontsteiger', users: 150, events: 280 },
+      { value: 'F4:centraal:ndsm', users: 110, events: 190 },
+      { value: 'F7:pontsteiger:ndsm', users: 60, events: 90 },
+    ],
+    characters: [
+      { value: 'pim', users: 200, events: 300 },
+      { value: 'toerist', users: 80, events: 120 },
+      { value: 'wielrenner', users: 45, events: 70 },
+      { value: 'koning', users: 16, events: 25 },
+      { value: 'pontkat', users: 6, events: 8 },
+    ],
+    devices: [
+      { value: 'false', users: 420, events: 760 },
+      { value: 'true', users: 260, events: 480 },
+    ],
   }
-  const funnel: Funnel = { sessions: 2100, snack: 900, started: 760, finished: 540 }
-  const tabs: NameCount[] = [{ name: 'ferries', count: 1400 }, { name: 'arcade', count: 700 }]
-  const devices: Bar[] = [{ label: 'PWA (geïnstalleerd)', value: 480 }, { label: 'Browser', value: 760 }]
-  const ferries: Bar[] = [
-    { label: 'F4:ndsm:centraal', value: 340 }, { label: 'F7:ndsm:pontsteiger', value: 280 },
-    { label: 'F4:centraal:ndsm', value: 190 }, { label: 'F7:pontsteiger:ndsm', value: 90 },
-  ]
-  const chars: Bar[] = [
-    { label: 'pim', value: 300 }, { label: 'toerist', value: 120 }, { label: 'wielrenner', value: 70 },
-    { label: 'koning', value: 25 }, { label: 'pontkat', value: 8 },
-  ]
   const rn = ['game_over', 'ferry_pick', 'tab_view', 'snack_open', 'game_start', 'character_select', 'session_start', 'heartbeat']
   const recent: RecentEvent[] = Array.from({ length: 14 }, (_, i) => {
     const n = rn[rnd(0, rn.length)]
@@ -221,13 +271,12 @@ function makeDemo(days: number) {
       n === 'character_select' ? { id: 'toerist' } : null
     return { name: n, props, path: '/', created_at: new Date(Date.now() - i * rnd(20, 300) * 1000).toISOString() }
   })
-  const retention: Retention = { users: 640, returning_users: 243, returning_rate: 38, new_today: 22, returning_today: 16, dau: 38, mau: 640 }
   const dn = ['Sven', 'Lisa', 'Pim', 'Noa', 'Daan', 'Eva', 'Tim', 'Fleur']
   const entries: EntryRow[] = Array.from({ length: 8 }, (_, i) => ({
     id: String(i), game_id: 'ponthop', score: rnd(20, 130), name: dn[i], email: `speler${i}@voorbeeld.nl`,
     created_at: new Date(Date.now() - i * 3_600_000 * rnd(1, 40)).toISOString(),
   }))
-  return { overview, live: 6, byName, daily, hourly, dow, funnel, recent, tabs, ferries, chars, devices, retention, entries }
+  return { dash, recent, entries }
 }
 
 // ---- Hoofdcomponent ---------------------------------------------------------
@@ -240,22 +289,14 @@ export function Admin() {
   const [loading, setLoading] = useState(false)
   const [firstLoaded, setFirstLoaded] = useState(false)
   const [demo, setDemo] = useState(false)
+  // Eigen (admin-)activiteit telt standaard NIET mee in de cijfers.
+  const [includeOwn, setIncludeOwn] = useState(false)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [testMsg, setTestMsg] = useState<string | null>(null)
 
-  const [overview, setOverview] = useState<Overview | null>(null)
-  const [live, setLive] = useState(0)
-  const [byName, setByName] = useState<NameCount[]>([])
-  const [daily, setDaily] = useState<Daily[]>([])
-  const [hourly, setHourly] = useState<number[]>(Array(24).fill(0))
-  const [dow, setDow] = useState<number[]>(Array(7).fill(0))
-  const [funnel, setFunnel] = useState<Funnel | null>(null)
-  const [retention, setRetention] = useState<Retention | null>(null)
+  const [dash, setDash] = useState<Dash | null>(null)
+  const [dashErr, setDashErr] = useState<string | null>(null)
   const [recent, setRecent] = useState<RecentEvent[]>([])
-  const [tabs, setTabs] = useState<NameCount[]>([])
-  const [ferries, setFerries] = useState<Bar[]>([])
-  const [chars, setChars] = useState<Bar[]>([])
-  const [devices, setDevices] = useState<Bar[]>([])
 
   const [admins, setAdmins] = useState<AdminRow[]>([])
   const [invites, setInvites] = useState<InviteRow[]>([])
@@ -299,58 +340,33 @@ export function Admin() {
   const loadAll = useCallback(async () => {
     if (demo) {
       const d = makeDemo(days)
-      setOverview(d.overview); setLive(d.live); setByName(d.byName); setDaily(d.daily); setHourly(d.hourly)
-      setDow(d.dow); setFunnel(d.funnel); setRecent(d.recent); setTabs(d.tabs); setFerries(d.ferries)
-      setChars(d.chars); setDevices(d.devices); setRetention(d.retention); setEntries(d.entries)
-      setLastUpdated(new Date()); setFirstLoaded(true)
+      setDash(d.dash); setRecent(d.recent); setEntries(d.entries)
+      setDashErr(null); setLastUpdated(new Date()); setFirstLoaded(true)
       return
     }
     if (!supabase) return
     setLoading(true)
-    const num = (v: unknown) => (typeof v === 'number' ? v : 0)
     const list = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
-    const [ov, lv, bn, dl, hr, dw, fn, rt, rc, tb, fr, ch, dv, ad, iv, he] = await Promise.all([
-      supabase.rpc('analytics_overview'),
-      supabase.rpc('analytics_live'),
-      supabase.rpc('analytics_by_name', { days }),
-      supabase.rpc('analytics_daily', { days }),
-      supabase.rpc('analytics_hourly', { days }),
-      supabase.rpc('analytics_dow', { days }),
-      supabase.rpc('analytics_funnel', { days }),
-      supabase.rpc('analytics_retention', { days }),
+    const [db, rc, ad, iv, he] = await Promise.all([
+      supabase.rpc('analytics_dashboard', { p_days: days, p_include_own: includeOwn }),
       supabase.rpc('analytics_recent', { lim: 40 }),
-      supabase.rpc('analytics_prop', { p_name: 'tab_view', p_key: 'view', days }),
-      supabase.rpc('analytics_prop', { p_name: 'ferry_pick', p_key: 'key', days }),
-      supabase.rpc('analytics_prop', { p_name: 'character_select', p_key: 'id', days }),
-      supabase.rpc('analytics_prop', { p_name: 'session_start', p_key: 'standalone', days }),
       supabase.rpc('admin_list_admins'),
       supabase.rpc('admin_list_invites'),
       supabase.rpc('admin_list_highscore_entries'),
     ])
-    if (ov.data) setOverview(ov.data as Overview)
-    setLive(num(lv.data))
-    setByName(list<NameCount>(bn.data))
-    setDaily(list<Daily>(dl.data))
-    const h = Array(24).fill(0)
-    list<{ hour: number; count: number }>(hr.data).forEach((r) => (h[r.hour] = r.count))
-    setHourly(h)
-    const d = Array(7).fill(0)
-    list<{ dow: number; count: number }>(dw.data).forEach((r) => (d[r.dow - 1] = r.count))
-    setDow(d)
-    if (fn.data) setFunnel(fn.data as Funnel)
-    if (rt.data) setRetention(rt.data as Retention)
+    // Fouten zijn zichtbaar, nooit stilletjes een leeg dashboard.
+    if (db.error) {
+      setDashErr(db.error.message)
+    } else if (db.data) {
+      setDash(db.data as Dash)
+      setDashErr(null)
+    }
     setRecent(list<RecentEvent>(rc.data))
-    setTabs(list<NameCount>(tb.data))
-    setFerries(list<{ value: string; count: number }>(fr.data).map((r) => ({ label: r.value, value: r.count })))
-    setChars(list<{ value: string; count: number }>(ch.data).map((r) => ({ label: r.value, value: r.count })))
-    setDevices(list<{ value: string; count: number }>(dv.data).map((r) => ({
-      label: r.value === 'true' ? 'PWA (geïnstalleerd)' : r.value === 'false' ? 'Browser' : r.value, value: r.count,
-    })))
     setAdmins(list<AdminRow>(ad.data))
     setInvites(list<InviteRow>(iv.data))
     setEntries(list<EntryRow>(he.data))
     setLastUpdated(new Date()); setFirstLoaded(true); setLoading(false)
-  }, [days, demo])
+  }, [days, demo, includeOwn])
 
   useEffect(() => { if (isAdmin) loadAll() }, [isAdmin, loadAll])
   useEffect(() => {
@@ -359,7 +375,7 @@ export function Admin() {
     return () => clearInterval(t)
   }, [isAdmin, auto, demo, loadAll])
 
-  // ---- Test-events (echte inserts, gelabeld) ----
+  // ---- Test-events (echte inserts, gelabeld; tellen nooit mee in de cijfers) ----
   const genTestEvents = async () => {
     if (!supabase || !session) return
     setTestMsg('Bezig…')
@@ -379,7 +395,7 @@ export function Admin() {
       return { user_id: uid, session_id: `test-${i % 8}-${rnd(0, 9999)}`, name, props, path: '/test', created_at: created.toISOString() }
     })
     const { error } = await supabase.from('analytics_events').insert(rows)
-    setTestMsg(error ? error.message : `${rows.length} test-events toegevoegd.`)
+    setTestMsg(error ? error.message : `${rows.length} test-events toegevoegd. Ze tellen niet mee in de grafieken; zie het datakwaliteit-blok.`)
     loadAll()
   }
   const clearTestEvents = async () => {
@@ -428,7 +444,7 @@ export function Admin() {
     if (!supabase || newPassword.length < 6) return
     setPwMsg(null)
     const { error } = await supabase.auth.updateUser({ password: newPassword })
-    setPwMsg(error ? error.message : 'Wachtwoord opgeslagen — je kunt nu ook met wachtwoord inloggen.')
+    setPwMsg(error ? error.message : 'Wachtwoord opgeslagen. Je kunt nu ook met wachtwoord inloggen.')
     if (!error) setNewPassword('')
   }
   const signOut = () => supabase?.auth.signOut()
@@ -514,15 +530,18 @@ export function Admin() {
   }
 
   // ---- Dashboard ----
-  const steps = funnel
+  const q = dash?.quality
+  const life = dash?.life
+  const win = dash?.window
+  const funnelSteps = dash
     ? [
-        { label: 'Bezoeken', value: funnel.sessions, emoji: '👋' },
-        { label: 'Arcade open', value: funnel.snack, emoji: '🎮' },
-        { label: 'Spel gestart', value: funnel.started, emoji: '▶️' },
-        { label: 'Game over', value: funnel.finished, emoji: '💦' },
+        { label: 'App geopend', value: dash.funnel.sessions, emoji: '👋' },
+        { label: 'Arcade bereikt', value: dash.funnel.arcade, emoji: '🎮' },
+        { label: 'Spel gestart', value: dash.funnel.started, emoji: '▶️' },
+        { label: 'Spel afgemaakt', value: dash.funnel.finished, emoji: '🏁' },
       ]
     : []
-  const funnelMax = Math.max(1, ...steps.map((s) => s.value))
+  const funnelBase = Math.max(1, dash?.funnel.sessions ?? 0)
   const skel = !firstLoaded
 
   return (
@@ -542,11 +561,11 @@ export function Admin() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-lime-300 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-lime-300" />
               </span>
-              {live} live
+              {life?.active_5m ?? 0} live
             </span>
             <div className="flex overflow-hidden rounded-full bg-white/15 text-xs font-semibold">
-              {[1, 7, 30].map((d) => (
-                <button key={d} type="button" onClick={() => setDays(d)} className={`px-3 py-1.5 ${days === d ? 'bg-white text-brand' : 'text-white'}`}>{d === 1 ? 'Vandaag' : `${d}d`}</button>
+              {[7, 30].map((d) => (
+                <button key={d} type="button" onClick={() => setDays(d)} className={`px-3 py-1.5 ${days === d ? 'bg-white text-brand' : 'text-white'}`}>{d}d</button>
               ))}
             </div>
             <button type="button" onClick={() => setDemo((v) => !v)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${demo ? 'bg-amber-300 text-amber-950' : 'bg-white/15 text-white'}`}>🎭 Demo</button>
@@ -558,75 +577,111 @@ export function Admin() {
         <p className="mt-2 text-xs text-white/70">Laatst bijgewerkt: {clock(lastUpdated)}{demo ? ' · demo-data (niet opgeslagen)' : ''}</p>
       </div>
 
+      {/* Fouten zichtbaar maken: nooit een stil leeg dashboard */}
+      {dashErr && !demo && (
+        <div className="mt-4 rounded-2xl bg-rose-50 p-4 text-sm text-rose-700 ring-1 ring-rose-200">
+          <p className="font-semibold">⚠️ Dashboard-data kon niet laden</p>
+          <p className="mt-1 text-xs">{dashErr}</p>
+          {/analytics_dashboard/.test(dashErr) && (
+            <p className="mt-2 text-xs">Waarschijnlijk is migratie <strong>0012_analytics_dashboard_v2.sql</strong> nog niet gedraaid in de Supabase SQL-editor.</p>
+          )}
+        </div>
+      )}
+
+      {/* Laag 3: datakwaliteit. Kan ik deze cijfers vertrouwen? */}
+      {!skel && dash && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl bg-white px-4 py-2.5 text-xs text-slate-500 shadow-sm ring-1 ring-slate-100">
+          <span title="Laatste echte (niet-test) event">
+            📶 Laatste event: <strong className="text-slate-700">{q?.last_real_event_at ? `${ago(q.last_real_event_at)} geleden` : 'nog nooit'}</strong>
+          </span>
+          <span>✨ <strong className="text-slate-700">{nf(q?.events_today ?? 0)}</strong> events vandaag</span>
+          <span className={q && q.test_events > 0 ? 'font-semibold text-amber-600' : ''}>
+            🧪 Test-events: {q && q.test_events > 0 ? `${nf(q.test_events)} aanwezig (tellen niet mee)` : 'geen'}
+          </span>
+          <span className={demo ? 'font-semibold text-amber-600' : ''}>🎭 Demo: {demo ? 'AAN' : 'uit'}</span>
+          <button
+            type="button"
+            onClick={() => setIncludeOwn((v) => !v)}
+            className={`rounded-full px-2.5 py-1 font-semibold ring-1 ${includeOwn ? 'bg-amber-50 text-amber-700 ring-amber-200' : 'bg-slate-50 text-slate-600 ring-slate-200'}`}
+            title="Admin-accounts (zoals jijzelf) meetellen of niet"
+          >
+            👤 Eigen activiteit: {includeOwn ? 'telt mee' : 'uitgesloten'}
+          </button>
+        </div>
+      )}
+
       {skel ? (
         <SkeletonBody />
-      ) : (
+      ) : !dash ? null : (
         <>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat emoji="👥" label="Gebruikers" value={nf(overview?.users_total ?? 0)} sub={`${nf(overview?.users_today ?? 0)} vandaag`} accent="brand" />
-            <Stat emoji="📅" label="Gebruikers 7d / 30d" value={`${nf(overview?.users_7d ?? 0)} / ${nf(overview?.users_30d ?? 0)}`} accent="sky" />
-            <Stat emoji="🟢" label="Actief nu (5 min)" value={nf(overview?.active_5m ?? live)} accent="brand" />
-            <Stat emoji="🎫" label="Sessies" value={nf(overview?.sessions_total ?? 0)} sub={`${nf(overview?.sessions_today ?? 0)} vandaag`} accent="violet" />
-            <Stat emoji="⏱" label="Gem. sessieduur" value={fmtDuration(overview?.avg_session_sec ?? 0)} accent="amber" />
-            <Stat emoji="✨" label="Events" value={nf(overview?.events_total ?? 0)} sub={`${nf(overview?.events_today ?? 0)} vandaag`} accent="slate" />
-            <Stat emoji="🎮" label="Spellen gespeeld" value={nf(overview?.game_overs ?? 0)} sub={`${nf(overview?.game_starts ?? 0)} gestart`} accent="rose" />
-            <Stat emoji="🏆" label="Score gem. / hoogst" value={`${nf(overview?.avg_score ?? 0)} / ${nf(overview?.max_score ?? 0)}`} accent="brand" />
+          {/* Laag 1: leeft de app? Altijd zichtbaar. */}
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Stat emoji="👥" label="Vandaag" value={nf(life?.users_today ?? 0)} sub={`unieke gebruikers · ${nf(life?.sessions_today ?? 0)} sessies`} accent="brand" />
+            <Stat emoji="📅" label="Laatste 7 dagen" value={nf(life?.users_7d ?? 0)} sub={`unieke gebruikers · ${nf(life?.sessions_7d ?? 0)} sessies`} accent="sky" />
+            <Stat emoji="🗓" label="Laatste 30 dagen" value={nf(life?.users_30d ?? 0)} sub={`totaal ooit: ${nf(life?.users_total ?? 0)}`} accent="violet" />
+            <Stat emoji="🔁" label="Sessies per gebruiker" value={life?.sessions_per_user_7d ?? '0'} sub={`7 dagen · n=${nf(life?.sessions_7d ?? 0)} sessies`} accent="amber" />
+            <Stat emoji="🟢" label="Actief nu (5 min)" value={nf(life?.active_5m ?? 0)} accent="brand" />
+            <Stat emoji="⏱" label="Sessieduur (mediaan)" value={fmtDuration(life?.median_session_sec ?? 0)} sub={`n=${nf(life?.n_dur_sessions ?? 0)} sessies met 2+ events`} accent="slate" />
           </div>
 
+          {/* Dag-reeks: aangevuld met echte nullen, dus een stille dag is zichtbaar 0 */}
           <div className="mt-4">
-            <Panel title="Retentie & terugkeer" emoji="🔁">
-              {!retention || retention.users === 0 ? <Empty /> : (
-                <>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <MiniStat label="Terugkerend" value={`${retention.returning_rate}%`} sub={`${nf(retention.returning_users)} v/d ${nf(retention.users)}`} />
-                    <MiniStat label="Nieuw vandaag" value={nf(retention.new_today)} />
-                    <MiniStat label="Terugkerend vandaag" value={nf(retention.returning_today)} />
-                    <MiniStat label="Stickiness" value={`${retention.mau ? Math.round((100 * retention.dau) / retention.mau) : 0}%`} sub={`DAU/MAU ${nf(retention.dau)}/${nf(retention.mau)}`} />
-                  </div>
-                  <div className="mt-3">
-                    <div className="mb-1 flex justify-between text-xs text-slate-500"><span>Aandeel terugkerende gebruikers ({days}d)</span><span>{retention.returning_rate}%</span></div>
-                    <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand" style={{ width: `${retention.returning_rate}%` }} /></div>
-                  </div>
-                </>
-              )}
+            <Panel title={`Unieke gebruikers per dag (${days}d)`} emoji="📈" sub={`n=${nf(win?.events ?? 0)} events in venster`}>
+              <Columns
+                data={dash.daily.map((d) => ({ label: d.day.slice(5), value: d.users, title: `${d.day}: ${nf(d.users)} gebruikers · ${nf(d.sessions)} sessies · ${nf(d.events)} events` }))}
+                labelEvery={Math.ceil(Math.max(1, dash.daily.length) / 6)}
+              />
             </Panel>
           </div>
 
+          {/* Laag 2: wat doen ze? Met minimale steekproef per widget. */}
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Panel title={`Activiteit per dag (${days}d)`} emoji="📈">
-              <Columns data={daily.map((d) => ({ label: d.day.slice(5), value: d.events, title: `${d.day}: ${nf(d.events)} events · ${nf(d.users)} users` }))} labelEvery={Math.ceil(Math.max(1, daily.length) / 6)} />
-            </Panel>
-            <Panel title="Wanneer zijn ze actief? (per uur)" emoji="🕑">
-              <Columns data={hourly.map((v, i) => ({ label: String(i), value: v, title: `${i}:00 — ${nf(v)} events` }))} color="bg-sky-500" labelEvery={3} />
-            </Panel>
-            <Panel title="Per weekdag" emoji="🗓️">
-              <Columns data={dow.map((v, i) => ({ label: DOW[i], value: v }))} color="bg-violet-500" />
-            </Panel>
-            <Panel title={`Funnel (${days}d)`} emoji="🫳">
-              {steps.length === 0 || sum(steps.map((s) => s.value)) === 0 ? <Empty /> : (
+            <Panel title={`Funnel (${days}d)`} emoji="🫳" sub={`n=${nf(dash.funnel.sessions)} sessies`}>
+              <Gate n={dash.funnel.sessions} min={10} unit="sessies">
                 <div className="flex flex-col gap-2">
-                  {steps.map((s) => (
+                  {funnelSteps.map((s) => (
                     <div key={s.label} className="flex items-center gap-2 text-sm">
-                      <span className="w-28 shrink-0 text-slate-600">{s.emoji} {s.label}</span>
+                      <span className="w-32 shrink-0 text-slate-600">{s.emoji} {s.label}</span>
                       <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-100">
-                        <div className="flex h-full items-center justify-end rounded-full bg-gradient-to-r from-brand to-teal-500 pr-2 text-[10px] font-bold text-white" style={{ width: `${(s.value / funnelMax) * 100}%` }}>{nf(s.value)}</div>
+                        <div className="flex h-full items-center justify-end rounded-full bg-gradient-to-r from-brand to-teal-500 pr-2 text-[10px] font-bold text-white" style={{ width: `${Math.max(4, (s.value / funnelBase) * 100)}%` }}>{nf(s.value)}</div>
                       </div>
+                      <span className="w-10 shrink-0 text-right text-xs tabular-nums text-slate-400">{Math.round((s.value / funnelBase) * 100)}%</span>
                     </div>
                   ))}
+                  <p className="text-[11px] text-slate-400">Stappen zijn genest: elke stap is een subset van de vorige.</p>
                 </div>
-              )}
+              </Gate>
             </Panel>
-          </div>
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Panel title="Welke tab" emoji="🧭"><BarList rows={tabs.map((t) => ({ label: t.name === 'arcade' ? 'Spelletjes' : t.name === 'ferries' ? 'Ponten' : t.name, value: t.count }))} color="bg-sky-500" /></Panel>
-            <Panel title="Welk apparaat" emoji="📱"><BarList rows={devices} color="bg-violet-500" /></Panel>
-            <Panel title="Gekozen pont" emoji="⛴️"><BarList rows={ferries} color="bg-brand" /></Panel>
-            <Panel title="Gekozen poppetje" emoji="🧑"><BarList rows={chars} color="bg-amber-500" /></Panel>
-          </div>
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Panel title={`Gebruik per actie (${days}d)`} emoji="✨"><BarList rows={byName.map((r) => ({ label: meta(r.name).label, value: r.count }))} /></Panel>
+            <Panel title="Piekuren (sessies per uur)" emoji="🕑" sub={`n=${nf(win?.sessions ?? 0)} sessies`}>
+              <Gate n={win?.events ?? 0} min={30} unit="events">
+                <Columns data={dash.hourly.map((v, i) => ({ label: String(i), value: v, title: `${i}:00 uur: ${nf(v)} sessies` }))} color="bg-sky-500" labelEvery={3} />
+              </Gate>
+            </Panel>
+            <Panel title="Per weekdag (sessies)" emoji="🗓️" sub={`n=${nf(win?.sessions ?? 0)} sessies`}>
+              <Gate n={win?.events ?? 0} min={30} unit="events">
+                <Columns data={dash.dow.map((v, i) => ({ label: DOW[i], value: v }))} color="bg-violet-500" />
+              </Gate>
+            </Panel>
+            <Panel title="Welke tab (unieke gebruikers)" emoji="🧭" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
+              <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
+                <BarList rows={dash.tabs.map((t) => ({ label: t.value === 'arcade' ? 'Spelletjes' : t.value === 'ferries' ? 'Ponten' : t.value, value: t.users, title: `${nf(t.events)} keer bekeken` }))} color="bg-sky-500" />
+              </Gate>
+            </Panel>
+            <Panel title="Welk apparaat (unieke gebruikers)" emoji="📱" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
+              <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
+                <BarList rows={dash.devices.map((r) => ({ label: deviceLabel(r.value), value: r.users }))} color="bg-violet-500" />
+              </Gate>
+            </Panel>
+            <Panel title="Gekozen pont (unieke gebruikers)" emoji="⛴️" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
+              <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
+                <BarList rows={dash.ferries.map((r) => ({ label: r.value, value: r.users, title: `${nf(r.events)} keer gekozen` }))} color="bg-brand" />
+              </Gate>
+            </Panel>
+            <Panel title="Gekozen poppetje (unieke gebruikers)" emoji="🧑" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
+              <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
+                <BarList rows={dash.characters.map((r) => ({ label: r.value, value: r.users }))} color="bg-amber-500" />
+              </Gate>
+            </Panel>
             <Panel title="Live activiteit" emoji="📡">
               {recent.length === 0 ? <Empty /> : (
                 <div className="flex max-h-72 flex-col gap-1 overflow-y-auto">
@@ -647,7 +702,7 @@ export function Admin() {
       {/* Verificatie-tools */}
       <div className="mt-4">
         <Panel title="Verificatie" emoji="🧪">
-          <p className="text-xs text-slate-500">Test of de keten insert → RPC → grafiek werkt. <strong>Demo</strong> (knop bovenin) vult alles met voorbeelddata zónder iets op te slaan; <strong>test-events</strong> schrijven echte (gelabelde) events die je weer kunt wissen.</p>
+          <p className="text-xs text-slate-500">Test of de keten insert → RPC → grafiek werkt. <strong>Demo</strong> (knop bovenin) vult alles met voorbeelddata zónder iets op te slaan; <strong>test-events</strong> schrijven echte (gelabelde) events. Test-events tellen nooit mee in de cijfers hierboven; je ziet ze alleen in het datakwaliteit-blok en kunt ze hier wissen.</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button type="button" disabled={demo} onClick={genTestEvents} className="rounded-xl bg-slate-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">➕ Genereer test-events</button>
             <button type="button" disabled={demo} onClick={clearTestEvents} className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">🧹 Wis test-events</button>
@@ -679,7 +734,7 @@ export function Admin() {
                   {entries.map((e) => (
                     <tr key={e.id} className="border-t border-slate-100">
                       <td className="py-1.5 text-slate-500">{new Date(e.created_at).toLocaleDateString('nl-NL')}</td>
-                      <td className="truncate text-slate-700">{e.name ?? '—'}</td>
+                      <td className="truncate text-slate-700">{e.name ?? '-'}</td>
                       <td className="font-semibold tabular-nums text-slate-800">{e.score}</td>
                       <td className="truncate text-slate-700">{e.email}</td>
                     </tr>
@@ -742,7 +797,7 @@ export function Admin() {
         </Panel>
       </div>
 
-      <p className="mt-4 text-center text-[11px] text-slate-400">Anonieme, privacy-vriendelijke statistieken · {auto ? 'ververst automatisch' : 'auto-verversen uit'}</p>
+      <p className="mt-4 text-center text-[11px] text-slate-400">Anonieme, privacy-vriendelijke statistieken · tijden in Europe/Amsterdam · {auto ? 'ververst automatisch' : 'auto-verversen uit'}</p>
     </Shell>
   )
 }
