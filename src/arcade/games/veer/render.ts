@@ -1,0 +1,193 @@
+/**
+ * Vaar de Pont — rendering. Tekent het IJ (mee met de echte tijd), de boten, de
+ * GVB-pont met kielzog, en de voortgangsbalk naar Centraal.
+ */
+import { FERRY_HALF, FERRY_LEN, FERRY_Y, progressFraction } from './engine'
+import type { Boat, VeerWorld } from './engine'
+
+function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rad = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + rad, y)
+  ctx.arcTo(x + w, y, x + w, y + h, rad)
+  ctx.arcTo(x + w, y + h, x, y + h, rad)
+  ctx.arcTo(x, y + h, x, y, rad)
+  ctx.arcTo(x, y, x + w, y, rad)
+  ctx.closePath()
+}
+function lerpHex(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16)
+  const pb = parseInt(b.slice(1), 16)
+  const r = Math.round(((pa >> 16) & 255) + (((pb >> 16) & 255) - ((pa >> 16) & 255)) * t)
+  const g = Math.round(((pa >> 8) & 255) + (((pb >> 8) & 255) - ((pa >> 8) & 255)) * t)
+  const bl = Math.round((pa & 255) + ((pb & 255) - (pa & 255)) * t)
+  return `rgb(${r},${g},${bl})`
+}
+function nightFactor(hour: number): number {
+  if (hour < 5 || hour >= 22) return 1
+  if (hour < 8) return (8 - hour) / 3
+  if (hour >= 19) return Math.min(1, (hour - 19) / 3)
+  return 0
+}
+
+export function renderVeer(ctx: CanvasRenderingContext2D, w: VeerWorld): void {
+  const { width, height, scroll } = w
+  const ferryY = height * FERRY_Y
+  const d = new Date()
+  const nf = nightFactor(d.getHours() + d.getMinutes() / 60)
+
+  ctx.clearRect(0, 0, width, height)
+  const top = lerpHex('#1AA0D8', '#123049', nf)
+  const bot = lerpHex('#0E6E9B', '#06182B', nf)
+  const wg = ctx.createLinearGradient(0, 0, 0, height)
+  wg.addColorStop(0, top)
+  wg.addColorStop(1, bot)
+  ctx.fillStyle = wg
+  ctx.fillRect(0, 0, width, height)
+
+  // Golflijnen die met de vaart mee naar beneden schuiven (gevoel van snelheid).
+  ctx.strokeStyle = `rgba(255,255,255,${0.10 - nf * 0.04})`
+  ctx.lineWidth = 2
+  const off = scroll % 40
+  for (let y = -40 + off; y < height; y += 40) {
+    for (let x = 12; x < width; x += 70) {
+      ctx.beginPath()
+      ctx.arc(x + (Math.floor(y / 40) % 2 ? 35 : 0), y, 8, Math.PI * 0.15, Math.PI * 0.85)
+      ctx.stroke()
+    }
+  }
+
+  // Boten.
+  for (const b of w.boats) {
+    const sy = ferryY - (b.y - scroll)
+    if (sy < -60 || sy > height + 60) continue
+    drawBoat(ctx, b, sy)
+  }
+
+  // De pont met kielzog.
+  drawFerry(ctx, w.ferry.x, ferryY, w.started ? scroll : 0)
+
+  // Voortgangsbalk naar Centraal.
+  drawProgress(ctx, width, progressFraction(w))
+
+  // Startuitleg zolang je nog niet gestuurd hebt (de pont ligt dan stil).
+  if (!w.started) drawStartHint(ctx, width, ferryY)
+}
+
+function drawStartHint(ctx: CanvasRenderingContext2D, width: number, ferryY: number) {
+  const cx = width / 2
+  const y = ferryY - 70
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'
+  const bw = 214
+  rr(ctx, cx - bw / 2, y - 22, bw, 44, 22)
+  ctx.fill()
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+  ctx.font = '700 14px system-ui, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('Veeg om te sturen', cx, y + 5)
+  // pijltjes links/rechts
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'
+  ctx.font = '700 16px system-ui, sans-serif'
+  ctx.fillText('◀', cx - bw / 2 + 16, y + 6)
+  ctx.fillText('▶', cx + bw / 2 - 16, y + 6)
+}
+
+function drawBoat(ctx: CanvasRenderingContext2D, b: Boat, sy: number) {
+  const x = b.x
+  // schaduw/kielzog-schijnsel
+  ctx.fillStyle = 'rgba(0,0,0,0.15)'
+  ctx.beginPath()
+  ctx.ellipse(x, sy + b.len / 2, b.w / 2, 5, 0, 0, Math.PI * 2)
+  ctx.fill()
+  if (b.kind === 'rondvaart') {
+    ctx.fillStyle = '#F3EFE6'
+    rr(ctx, x - b.w / 2, sy - b.len / 2, b.w, b.len, 9)
+    ctx.fill()
+    ctx.fillStyle = 'rgba(90,120,140,0.6)'
+    rr(ctx, x - b.w / 2 + 6, sy - 5, b.w - 12, 10, 3)
+    ctx.fill()
+  } else if (b.kind === 'taxi') {
+    ctx.fillStyle = '#F4C20D'
+    rr(ctx, x - b.w / 2, sy - b.len / 2, b.w, b.len, 7)
+    ctx.fill()
+    ctx.fillStyle = '#11181C'
+    ctx.fillRect(x - 6, sy - 3, 12, 6)
+  } else if (b.kind === 'sup') {
+    ctx.fillStyle = '#C98A3B'
+    ctx.beginPath()
+    ctx.ellipse(x, sy, b.w / 2, b.len / 2, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#15616D'
+    ctx.beginPath()
+    ctx.arc(x, sy, 4, 0, Math.PI * 2)
+    ctx.fill()
+  } else {
+    // boei
+    ctx.fillStyle = '#E2231A'
+    ctx.beginPath()
+    ctx.arc(x, sy, b.w / 2, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(x - b.w / 2, sy - 2, b.w, 4)
+  }
+}
+
+function drawFerry(ctx: CanvasRenderingContext2D, x: number, y: number, scroll: number) {
+  // kielzog: twee lichte strepen die naar beneden bewegen
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)'
+  ctx.lineWidth = 3
+  const o = scroll % 22
+  for (let i = 0; i < 3; i++) {
+    const yy = y + FERRY_LEN / 2 + 6 + i * 22 + o
+    ctx.globalAlpha = 0.5 - i * 0.15
+    ctx.beginPath()
+    ctx.moveTo(x - 7, yy)
+    ctx.lineTo(x - 12, yy + 12)
+    ctx.moveTo(x + 7, yy)
+    ctx.lineTo(x + 12, yy + 12)
+    ctx.stroke()
+  }
+  ctx.globalAlpha = 1
+
+  // schaduw
+  ctx.fillStyle = 'rgba(0,0,0,0.2)'
+  ctx.beginPath()
+  ctx.ellipse(x, y + FERRY_LEN / 2, FERRY_HALF, 6, 0, 0, Math.PI * 2)
+  ctx.fill()
+  // romp (GVB-blauw), neus naar boven
+  ctx.fillStyle = '#009DE0'
+  ctx.beginPath()
+  ctx.moveTo(x, y - FERRY_LEN / 2 - 6)
+  ctx.lineTo(x + FERRY_HALF, y - FERRY_LEN / 2 + 6)
+  ctx.lineTo(x + FERRY_HALF, y + FERRY_LEN / 2)
+  ctx.lineTo(x - FERRY_HALF, y + FERRY_LEN / 2)
+  ctx.lineTo(x - FERRY_HALF, y - FERRY_LEN / 2 + 6)
+  ctx.closePath()
+  ctx.fill()
+  // dek/cabine
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
+  rr(ctx, x - 12, y - 8, 24, 18, 4)
+  ctx.fill()
+  ctx.fillStyle = '#009DE0'
+  ctx.font = '700 10px system-ui, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.fillText('GVB', x, y + 4)
+}
+
+function drawProgress(ctx: CanvasRenderingContext2D, width: number, frac: number) {
+  const pad = 16
+  const y = 14
+  const w = width - pad * 2
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'
+  rr(ctx, pad, y, w, 8, 4)
+  ctx.fill()
+  ctx.fillStyle = '#1D9E75'
+  rr(ctx, pad, y, Math.max(6, w * frac), 8, 4)
+  ctx.fill()
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'
+  ctx.font = '600 11px system-ui, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillText('NDSM', pad, y + 22)
+  ctx.textAlign = 'right'
+  ctx.fillText('Centraal 🏙️', width - pad, y + 22)
+}

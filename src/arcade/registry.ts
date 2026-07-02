@@ -1,5 +1,6 @@
 import type { GameMeta } from './types'
 import { createPontHop } from './games/ponthop/PontHop'
+import { createVeer } from './games/veer/Veer'
 import { CharacterShop } from './games/ponthop/CharacterShop'
 
 /**
@@ -14,6 +15,13 @@ export const GAMES: GameMeta[] = [
     tagline: { nl: 'Steek het IJ over', en: 'Cross the IJ' },
     create: createPontHop,
     MenuPanel: CharacterShop,
+  },
+  {
+    id: 'veer',
+    emoji: '⛴️',
+    title: { nl: 'Vaar de Pont', en: 'Steer the Ferry' },
+    tagline: { nl: 'NDSM naar Centraal over het IJ', en: 'NDSM to Centraal across the IJ' },
+    create: createVeer,
   },
 ]
 

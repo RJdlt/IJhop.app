@@ -72,6 +72,9 @@ export function ArcadeShell({
   const optsRef = useRef<GameInitOpts | null>(null)
 
   const [screen, setScreen] = useState<Screen>('menu')
+  // Welk spel er zojuist gespeeld is; bepaalt de ranglijst en 'opnieuw' op het
+  // game-over-scherm, zodat die het gespeelde spel volgen en niet altijd Pont Hop.
+  const [playedGame, setPlayedGame] = useState<string>(BOARD_GAME)
   const [score, setScore] = useState(0)
   const [result, setResult] = useState<{
     score: number
@@ -171,6 +174,7 @@ export function ArcadeShell({
       const meta = getGame(id)
       const canvas = canvasRef.current
       if (!meta || !canvas) return
+      setPlayedGame(id)
       teardownGame()
       const sized = sizeCanvas()
       if (!sized) return
@@ -278,21 +282,25 @@ export function ArcadeShell({
     </div>
   )
 
-  const leaderboard = (
-    <Leaderboard gameId={BOARD_GAME} youName={nick.trim()} reloadKey={boardReload} />
+  const makeLeaderboard = (gameId: string) => (
+    <Leaderboard gameId={gameId} youName={nick.trim()} reloadKey={boardReload} />
   )
+  const makeCrossingBoard = (gameId: string) =>
+    crossingRoom ? (
+      <Leaderboard
+        gameId={gameId}
+        youName={nick.trim()}
+        reloadKey={boardReload}
+        room={crossingRoom}
+        title={`🚤 ${t.arcade.thisCrossing}${crossingLabel ? ` · ${crossingLabel}` : ''}${
+          crossingPlayers && crossingPlayers > 0 ? ` · 👥 ${crossingPlayers}` : ''
+        }`}
+      />
+    ) : null
 
-  const crossingBoard = crossingRoom ? (
-    <Leaderboard
-      gameId={BOARD_GAME}
-      youName={nick.trim()}
-      reloadKey={boardReload}
-      room={crossingRoom}
-      title={`🚤 ${t.arcade.thisCrossing}${crossingLabel ? ` · ${crossingLabel}` : ''}${
-        crossingPlayers && crossingPlayers > 0 ? ` · 👥 ${crossingPlayers}` : ''
-      }`}
-    />
-  ) : null
+  // Menu toont de standaardlijst; game-over volgt het gespeelde spel.
+  const leaderboard = makeLeaderboard(BOARD_GAME)
+  const crossingBoard = makeCrossingBoard(BOARD_GAME)
 
   const pageMode = layout === 'page'
   // Spelletjes-tab ('page'): menu/over stromen als gewone pagina-inhoud, alleen
@@ -451,13 +459,13 @@ export function ArcadeShell({
             {t.arcade.addedAs}{' '}
             <span className="font-semibold text-white">{sanitizeName(nick)}</span>
           </p>
-          {result.offerPrize && <PrizeEntry gameId="ponthop" score={result.score} />}
-          {crossingBoard}
-          {leaderboard}
+          {result.offerPrize && <PrizeEntry gameId={playedGame} score={result.score} />}
+          {makeCrossingBoard(playedGame)}
+          {makeLeaderboard(playedGame)}
           <div className="flex w-full max-w-xs flex-col gap-2">
             <button
               type="button"
-              onClick={() => startGame('ponthop')}
+              onClick={() => startGame(playedGame)}
               className="rounded-2xl bg-gradient-to-r from-emerald-400 to-brand px-4 py-3.5 font-extrabold text-white shadow-[0_12px_34px_-8px_rgba(29,158,117,0.85)] transition active:scale-[0.99]"
             >
               🔁 {t.arcade.tryAgain}
