@@ -1,8 +1,10 @@
 import type { GameInitOpts, GameModule, GameState, InputAction } from '../../types'
-import { createVeerWorld, resizeVeer, steerVeer, stepVeer, progressFraction } from './engine'
+import { createVeerWorld, resizeVeer, steerVeer, stepVeer, progressFraction, FERRY_Y } from './engine'
 import type { VeerWorld } from './engine'
 import { renderVeer } from './render'
 import { Sfx } from '../ponthop/audio'
+import { Fx } from '../../fx'
+import { loadProfile, saveProfile } from '../ponthop/profile'
 
 /**
  * Vaar de Pont — stuur de GVB-pont van NDSM naar Centraal over het IJ. Veeg
@@ -20,7 +22,13 @@ export function createVeer(): GameModule {
   let lastT = 0
   let lastScore = 0
   let lastCrossings = 0
+  let lastCoins = 0
+  let lastShield = 0
   const sfx = new Sfx()
+  const fx = new Fx()
+
+  /** Schermpositie van de pont (voor deeltjes-effecten). */
+  const ferryScreen = (w: VeerWorld) => ({ x: w.ferry.x, y: w.height * FERRY_Y })
 
   const frame = (now: number) => {
     if (!world || !ctx || !opts || state !== 'running') return
@@ -29,25 +37,60 @@ export function createVeer(): GameModule {
 
     const wasSafe = !world.over
     stepVeer(world, dt)
+    fx.update(dt)
 
-    if (world.crossings > lastCrossings) {
-      lastCrossings = world.crossings
+    const p = ferryScreen(world)
+    // Stroopwafel opgepakt.
+    if (world.coins > lastCoins) {
       sfx.coin()
+      fx.coinBurst(p.x, p.y, 1)
+      fx.popText(p.x, p.y - 20, '+5 🧇')
+      lastCoins = world.coins
+    }
+    // Schild opgepakt.
+    if (world.shield > lastShield) {
+      fx.coinBurst(p.x, p.y, 3)
+      fx.popText(p.x, p.y - 24, 'Schild! 🛟', '#8FD8FF', 15)
+      lastShield = world.shield
+    }
+    // Schild verbruikt bij een aanvaring: klap + tekst, maar geen game-over.
+    if (world.shield < lastShield) {
+      sfx.splash()
+      fx.splash(p.x, p.y)
+      fx.popText(p.x, p.y - 20, 'Schild op! 🛟', '#FFD24A', 15)
+      lastShield = world.shield
+    }
+    // Overtocht gehaald: confetti + juichtekst.
+    if (world.crossings > lastCrossings) {
+      sfx.coin()
+      fx.crossingBurst(p.x, p.y)
+      fx.popText(p.x, p.y - 26, 'Centraal! 🎉', '#8FE9C0', 16)
+      lastCrossings = world.crossings
     }
     if (world.score !== lastScore) {
       lastScore = world.score
       opts.onScoreChange(world.score)
     }
 
-    renderVeer(ctx, world)
+    renderVeer(ctx, world, fx.shakeOffset())
+    fx.draw(ctx)
 
     if (world.over && wasSafe) {
       state = 'over'
       sfx.splash()
+      fx.splash(p.x, p.y)
+      fx.draw(ctx)
       cancelAnimationFrame(raf)
+      // Verzamelde stroopwafels in de gedeelde spaarpot (zelfde wallet als Pont Hop).
+      if (world.coins > 0) {
+        const profile = loadProfile()
+        profile.wallet += world.coins
+        saveProfile(profile)
+      }
       const frac = progressFraction(world)
       const lines = [
         { label: 'Overtochten', value: String(world.crossings) },
+        { label: 'Wafels 🧇', value: `+${world.coins}` },
         { label: 'Deze reis', value: `${Math.round(frac * 100)}% naar Centraal` },
       ]
       opts.onGameOver(world.score, lines)
@@ -61,7 +104,10 @@ export function createVeer(): GameModule {
     world = createVeerWorld({ width: opts.width, height: opts.height, seed: (Date.now() & 0xffffffff) >>> 0 })
     lastScore = 0
     lastCrossings = 0
+    lastCoins = 0
+    lastShield = 0
     lastT = 0
+    fx.clear()
     opts.onScoreChange(0)
     state = 'running'
     cancelAnimationFrame(raf)

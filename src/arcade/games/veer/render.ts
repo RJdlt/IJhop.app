@@ -3,7 +3,7 @@
  * GVB-pont met kielzog, en de voortgangsbalk naar Centraal.
  */
 import { FERRY_HALF, FERRY_LEN, FERRY_Y, progressFraction } from './engine'
-import type { Boat, VeerWorld } from './engine'
+import type { Boat, Item, VeerWorld } from './engine'
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   const rad = Math.min(r, w / 2, h / 2)
@@ -30,7 +30,11 @@ function nightFactor(hour: number): number {
   return 0
 }
 
-export function renderVeer(ctx: CanvasRenderingContext2D, w: VeerWorld): void {
+export function renderVeer(
+  ctx: CanvasRenderingContext2D,
+  w: VeerWorld,
+  shake?: { x: number; y: number },
+): void {
   const { width, height, scroll } = w
   const ferryY = height * FERRY_Y
   const d = new Date()
@@ -57,6 +61,14 @@ export function renderVeer(ctx: CanvasRenderingContext2D, w: VeerWorld): void {
     }
   }
 
+  // Bewegende laag (boten, items, pont) schudt mee bij een klap; de water-basis
+  // en de HUD blijven staan zodat er geen lege randen ontstaan.
+  const shaken = shake && (shake.x !== 0 || shake.y !== 0)
+  if (shaken) {
+    ctx.save()
+    ctx.translate(shake!.x, shake!.y)
+  }
+
   // Boten.
   for (const b of w.boats) {
     const sy = ferryY - (b.y - scroll)
@@ -64,14 +76,87 @@ export function renderVeer(ctx: CanvasRenderingContext2D, w: VeerWorld): void {
     drawBoat(ctx, b, sy)
   }
 
-  // De pont met kielzog.
-  drawFerry(ctx, w.ferry.x, ferryY, w.started ? scroll : 0)
+  // Stroopwafels en schilden om op te pikken.
+  for (const it of w.items) {
+    if (it.taken) continue
+    const sy = ferryY - (it.y - scroll)
+    if (sy < -40 || sy > height + 40) continue
+    drawItem(ctx, it, sy)
+  }
 
-  // Voortgangsbalk naar Centraal.
+  // De pont met kielzog (plus schild-aura als er een schild actief is).
+  drawFerry(ctx, w.ferry.x, ferryY, w.started ? scroll : 0, w.shield > 0)
+
+  if (shaken) ctx.restore()
+
+  // Voortgangsbalk naar Centraal + tellers.
   drawProgress(ctx, width, progressFraction(w))
+  drawStats(ctx, w.coins, w.shield)
 
   // Startuitleg zolang je nog niet gestuurd hebt (de pont ligt dan stil).
   if (!w.started) drawStartHint(ctx, width, ferryY)
+}
+
+function drawItem(ctx: CanvasRenderingContext2D, it: Item, sy: number) {
+  const x = it.x
+  if (it.kind === 'coin') {
+    // stroopwafel met warme glans
+    const g = ctx.createRadialGradient(x - 3, sy - 3, 2, x, sy, it.r)
+    g.addColorStop(0, '#F2B24A')
+    g.addColorStop(1, '#D98A1E')
+    ctx.fillStyle = g
+    ctx.beginPath()
+    ctx.arc(x, sy, it.r, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.strokeStyle = '#A8650F'
+    ctx.lineWidth = 2
+    ctx.stroke()
+    ctx.strokeStyle = 'rgba(120,70,10,0.35)'
+    ctx.lineWidth = 1
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath()
+      ctx.moveTo(x - it.r + 3, sy + i * 4)
+      ctx.lineTo(x + it.r - 3, sy + i * 4)
+      ctx.moveTo(x + i * 4, sy - it.r + 3)
+      ctx.lineTo(x + i * 4, sy + it.r - 3)
+      ctx.stroke()
+    }
+  } else {
+    // reddingsboei (schild): rood-wit met ring
+    ctx.fillStyle = '#E2231A'
+    ctx.beginPath()
+    ctx.arc(x, sy, it.r, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.beginPath()
+    ctx.arc(x, sy, it.r * 0.55, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#E2231A'
+    ctx.beginPath()
+    ctx.arc(x, sy, it.r * 0.32, 0, Math.PI * 2)
+    ctx.fill()
+    // vier witte streepjes op de ring
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 3
+    for (let a = 0; a < 4; a++) {
+      const ang = (a * Math.PI) / 2 + Math.PI / 4
+      ctx.beginPath()
+      ctx.moveTo(x + Math.cos(ang) * it.r * 0.55, sy + Math.sin(ang) * it.r * 0.55)
+      ctx.lineTo(x + Math.cos(ang) * it.r, sy + Math.sin(ang) * it.r)
+      ctx.stroke()
+    }
+  }
+}
+
+function drawStats(ctx: CanvasRenderingContext2D, coins: number, shield: number) {
+  ctx.font = '700 13px system-ui, sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'
+  rr(ctx, 12, 44, shield > 0 ? 128 : 74, 24, 12)
+  ctx.fill()
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+  ctx.fillText(`🧇 ${coins}`, 22, 61)
+  if (shield > 0) ctx.fillText(`🛟 ${shield}`, 80, 61)
 }
 
 function drawStartHint(ctx: CanvasRenderingContext2D, width: number, ferryY: number) {
@@ -132,7 +217,16 @@ function drawBoat(ctx: CanvasRenderingContext2D, b: Boat, sy: number) {
   }
 }
 
-function drawFerry(ctx: CanvasRenderingContext2D, x: number, y: number, scroll: number) {
+function drawFerry(ctx: CanvasRenderingContext2D, x: number, y: number, scroll: number, shielded: boolean) {
+  // Schild-aura: een zachte blauwe ring rond de pont zolang er een schild is.
+  if (shielded) {
+    const pulse = 0.5 + 0.35 * Math.sin(scroll / 14)
+    ctx.strokeStyle = `rgba(127,199,236,${(0.45 + pulse * 0.4).toFixed(3)})`
+    ctx.lineWidth = 3
+    ctx.beginPath()
+    ctx.ellipse(x, y, FERRY_HALF + 10, FERRY_LEN / 2 + 12, 0, 0, Math.PI * 2)
+    ctx.stroke()
+  }
   // kielzog: twee lichte strepen die naar beneden bewegen
   ctx.strokeStyle = 'rgba(255,255,255,0.5)'
   ctx.lineWidth = 3

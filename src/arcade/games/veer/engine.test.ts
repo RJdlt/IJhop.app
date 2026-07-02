@@ -50,4 +50,27 @@ describe('Vaar de Pont engine', () => {
     expect(p).toBeGreaterThanOrEqual(0)
     expect(p).toBeLessThan(1)
   })
+
+  it('pakt een stroopwafel onder de pont op en telt punten', () => {
+    const w = world()
+    steerVeer(w, 'right')
+    w.boats = [] // geen boten die de test in de weg varen
+    w.items = [{ x: w.ferry.x, y: w.scroll + 4, r: 12, kind: 'coin', taken: false }]
+    const c0 = w.coins
+    const s0 = w.score
+    for (let i = 0; i < 4; i++) stepVeer(w, 0.02)
+    expect(w.coins).toBe(c0 + 1)
+    expect(w.score).toBeGreaterThan(s0)
+  })
+
+  it('een schild vangt precies een aanvaring op', () => {
+    const w = world()
+    steerVeer(w, 'right')
+    w.boats = [{ x: w.ferry.x, y: w.scroll + 2, w: 40, len: 20, kind: 'taxi', vx: 0 }]
+    w.items = []
+    w.shield = 1
+    for (let i = 0; i < 3; i++) stepVeer(w, 0.02)
+    expect(w.over).toBe(false)
+    expect(w.shield).toBe(0)
+  })
 })

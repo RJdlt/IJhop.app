@@ -4,7 +4,7 @@ import type { World } from './engine'
 import { render, playerScreen } from './render'
 import type { Skin } from './render'
 import { Sfx } from './audio'
-import { Fx } from './fx'
+import { Fx } from '../../fx'
 import {
   applyRunResult,
   CHARACTERS,

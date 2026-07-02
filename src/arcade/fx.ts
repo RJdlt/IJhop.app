@@ -1,7 +1,8 @@
 /**
- * Pont Hop — "juice"-laag: deeltjes, zwevende tekst en schermschud. Puur visueel
- * en volledig los van de deterministische engine (draait alleen in de browser via
- * de GameModule), dus hier mag Math.random. Alles in schermcoördinaten.
+ * Gedeelde "juice"-laag voor de arcade: deeltjes, zwevende tekst en schermschud.
+ * Puur visueel en volledig los van de deterministische engines (draait alleen in
+ * de browser via de GameModule), dus hier mag Math.random. Alle coördinaten zijn
+ * schermcoördinaten. Gebruikt door zowel Pont Hop als Vaar de Pont.
  */
 
 interface Particle {

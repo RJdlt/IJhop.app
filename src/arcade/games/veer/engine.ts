@@ -16,6 +16,14 @@ export interface Boat {
   kind: BoatKind
   vx: number // horizontale snelheid (kruisend verkeer)
 }
+export type ItemKind = 'coin' | 'shield'
+export interface Item {
+  x: number
+  y: number // wereld-y
+  r: number
+  kind: ItemKind
+  taken: boolean
+}
 export interface VeerWorld {
   width: number
   height: number
@@ -24,10 +32,13 @@ export interface VeerWorld {
   scroll: number // afstand gevaren (px)
   speed: number // huidige voorwaartse snelheid (px/s)
   crossings: number
+  coins: number // opgepakte stroopwafels
+  shield: number // reddingsboei-schilden op voorraad (vangt één aanvaring op)
   score: number
   over: boolean
   started: boolean
   boats: Boat[]
+  items: Item[]
   genTo: number
   rng: () => number
 }
@@ -36,6 +47,9 @@ export const FERRY_HALF = 22
 export const FERRY_LEN = 34
 export const FERRY_Y = 0.72 // schermfractie waar de pont vaart
 export const CROSS_DIST = 900 // px voor één overtocht NDSM -> Centraal
+export const COIN_VALUE = 5
+const COIN_R = 12
+const SHIELD_R = 14
 const BASE_SPEED = 130
 const MAX_SPEED = 360
 const STEER = 240
@@ -82,6 +96,17 @@ function spawn(w: VeerWorld): void {
     }
     const x = bw / 2 + w.rng() * (w.width - bw)
     w.boats.push({ x, y: w.genTo, w: bw, len, kind, vx })
+
+    // Af en toe een stroopwafel in het gat achter de boot (reden om te sturen),
+    // en zeldzaam een reddingsboei-schild. Nooit precies op de boot zelf.
+    const ir = w.rng()
+    if (ir < 0.4) {
+      const ix = COIN_R + w.rng() * (w.width - COIN_R * 2)
+      w.items.push({ x: ix, y: w.genTo - gap * 0.5, r: COIN_R, kind: 'coin', taken: false })
+    } else if (ir < 0.46) {
+      const ix = SHIELD_R + w.rng() * (w.width - SHIELD_R * 2)
+      w.items.push({ x: ix, y: w.genTo - gap * 0.5, r: SHIELD_R, kind: 'shield', taken: false })
+    }
   }
 }
 
@@ -94,10 +119,13 @@ export function createVeerWorld(o: { width: number; height: number; seed?: numbe
     scroll: 0,
     speed: BASE_SPEED,
     crossings: 0,
+    coins: 0,
+    shield: 0,
     score: 0,
     over: false,
     started: false,
     boats: [],
+    items: [],
     genTo: 0,
     rng: makeRng(o.seed ?? 1),
   }
@@ -141,8 +169,11 @@ export function stepVeer(w: VeerWorld, dt: number): void {
 
   const c = Math.floor(w.scroll / CROSS_DIST)
   if (c > w.crossings) w.crossings = c
-  w.score = Math.floor(w.scroll / 6) + w.crossings * 40
+  w.score = Math.floor(w.scroll / 6) + w.crossings * 40 + w.coins * COIN_VALUE
 
+  // Botsingen met boten. Een schild vangt één aanvaring op: de boot wordt dan
+  // "weggeduwd" (verwijderd) en het schild verbruikt, in plaats van game-over.
+  const survivors: Boat[] = []
   for (const b of w.boats) {
     if (b.vx) {
       b.x += b.vx * step
@@ -155,13 +186,34 @@ export function stepVeer(w: VeerWorld, dt: number): void {
       }
     }
     const dy = Math.abs(b.y - w.scroll)
-    if (dy < (b.len + FERRY_LEN) / 2 - 4 && Math.abs(b.x - w.ferry.x) < b.w / 2 + FERRY_HALF - 6) {
+    const hit = dy < (b.len + FERRY_LEN) / 2 - 4 && Math.abs(b.x - w.ferry.x) < b.w / 2 + FERRY_HALF - 6
+    if (hit) {
+      if (w.shield > 0) {
+        w.shield -= 1
+        continue // boot verdwijnt, pont vaart door
+      }
       w.over = true
       return
     }
+    survivors.push(b)
   }
+  w.boats = survivors.filter((b) => b.y > w.scroll - 80)
 
-  w.boats = w.boats.filter((b) => b.y > w.scroll - 80)
+  // Stroopwafels en schilden oppakken die onder de pont door komen.
+  for (const it of w.items) {
+    if (it.taken) continue
+    if (
+      Math.abs(it.y - w.scroll) < it.r + FERRY_LEN / 2 &&
+      Math.abs(it.x - w.ferry.x) < it.r + FERRY_HALF
+    ) {
+      it.taken = true
+      if (it.kind === 'coin') w.coins += 1
+      else w.shield += 1
+    }
+  }
+  w.items = w.items.filter((it) => !it.taken && it.y > w.scroll - 80)
+  w.score = Math.floor(w.scroll / 6) + w.crossings * 40 + w.coins * COIN_VALUE
+
   spawn(w)
 }
 
