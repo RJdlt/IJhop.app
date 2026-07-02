@@ -85,7 +85,8 @@ describe('invoer', () => {
       if (++guard > 20) break
     }
     expect(w.crossings).toBe(1)
-    expect(w.score).toBe(CROSS_BASE)
+    // Score volgt de formule (kruisingen + eventueel onderweg gepakte munten).
+    expect(w.score).toBe(w.crossings * CROSS_BASE + w.coins * COIN_VALUE)
   })
 
   it('kan niet onder de startrij terug', () => {

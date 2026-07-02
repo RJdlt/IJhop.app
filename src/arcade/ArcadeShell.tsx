@@ -76,6 +76,11 @@ export function ArcadeShell({
   // game-over-scherm, zodat die het gespeelde spel volgen en niet altijd Pont Hop.
   const [playedGame, setPlayedGame] = useState<string>(BOARD_GAME)
   const [score, setScore] = useState(0)
+  // Persoonlijk record vóór deze run + korte, niet-blokkerende record-viering
+  // zodra je het tijdens het spelen verbreekt.
+  const prevHighRef = useRef(0)
+  const [recordToast, setRecordToast] = useState(false)
+  const recordShownRef = useRef(false)
   const [result, setResult] = useState<{
     score: number
     high: number
@@ -175,6 +180,9 @@ export function ArcadeShell({
       const canvas = canvasRef.current
       if (!meta || !canvas) return
       setPlayedGame(id)
+      prevHighRef.current = getHighScore(id)
+      recordShownRef.current = false
+      setRecordToast(false)
       teardownGame()
       const sized = sizeCanvas()
       if (!sized) return
@@ -183,7 +191,14 @@ export function ArcadeShell({
         width: sized.w,
         height: sized.h,
         dpr: sized.dpr,
-        onScoreChange: (s) => setScore(s),
+        onScoreChange: (s) => {
+          setScore(s)
+          // Record verbroken tijdens het spelen: vier het één keer, kort.
+          if (!recordShownRef.current && prevHighRef.current > 0 && s > prevHighRef.current) {
+            recordShownRef.current = true
+            setRecordToast(true)
+          }
+        },
         onGameOver: (s, lines) => {
           const { high, isRecord } = recordScore(id, s)
           detachInput()
@@ -243,6 +258,31 @@ export function ArcadeShell({
       attachInputNow()
     }
   }, [paused, screen, detachInput, attachInputNow])
+
+  // Record-viering vanzelf laten verdwijnen (niet-blokkerend).
+  useEffect(() => {
+    if (!recordToast) return
+    const id = window.setTimeout(() => setRecordToast(false), 1800)
+    return () => window.clearTimeout(id)
+  }, [recordToast])
+
+  // Batterij + fatsoen: pauzeer zodra de tab niet zichtbaar is (scherm uit,
+  // app naar achtergrond) en hervat bij terugkomst, tenzij extern gepauzeerd.
+  useEffect(() => {
+    const onVis = () => {
+      const mod = moduleRef.current
+      if (!mod || screen !== 'playing') return
+      if (document.hidden) {
+        mod.pause()
+        detachInput()
+      } else if (!paused) {
+        mod.resume()
+        attachInputNow()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [screen, paused, detachInput, attachInputNow])
 
   // Ruim alles netjes op bij unmount (geen lekken bij herstart).
   useEffect(() => () => teardownGame(), [teardownGame])
@@ -329,8 +369,8 @@ export function ArcadeShell({
       {/* Topbalk: in-game HUD (score, geluid, sluiten) */}
       {screen === 'playing' && (
         <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <span className="pointer-events-auto rounded-full bg-black/30 px-3 py-1 text-sm font-semibold tabular-nums text-white backdrop-blur">
-            {t.arcade.score}: {score}
+          <span className="pointer-events-auto rounded-2xl bg-black/35 px-4 py-1.5 text-2xl font-black tabular-nums leading-none text-white shadow-lg backdrop-blur">
+            {score}
           </span>
           <div className="pointer-events-auto flex items-center gap-1.5">
             <button
@@ -359,6 +399,15 @@ export function ArcadeShell({
       {screen === 'playing' && banner && (
         <div className="pointer-events-none absolute inset-x-0 top-12 flex justify-center px-3">
           {banner}
+        </div>
+      )}
+
+      {/* Record-viering tijdens het spelen (kort, niet-blokkerend) */}
+      {screen === 'playing' && recordToast && (
+        <div className="pointer-events-none absolute inset-x-0 top-14 flex justify-center px-3">
+          <span className="animate-riseIn rounded-full bg-gradient-to-r from-amber-400 to-emerald-400 px-4 py-1.5 text-sm font-extrabold text-brand-dark shadow-[0_10px_30px_-8px_rgba(245,200,60,0.9)]">
+            🏆 {t.arcade.newRecord}
+          </span>
         </div>
       )}
 

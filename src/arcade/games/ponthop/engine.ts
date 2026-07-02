@@ -73,6 +73,8 @@ export interface World {
 export const ROW_H = 58
 export const COL_W = 50
 export const PLAYER_HALF = 16
+// De eerste rijen zijn een zachte aanloop (zie makeLane): rustiger en ruimer.
+export const INTRO_ROWS = 10
 const COIN_R = 13
 const CULL_BEHIND = 4
 const GEN_AHEAD = 16
@@ -140,6 +142,16 @@ function makeLane(
     speed = randRange(rng, 64, 104) * factor
     gap = objW + randRange(rng, 48, 92)
   }
+  // Onboarding-versoepeling: de eerste rijen zijn bewust mild zodat je leert
+  // door te spelen (de eerste ~10 seconden zijn bijna niet te verliezen). Puur
+  // rekenkundig op basis van de rij-index, dus de RNG-stroom blijft identiek en
+  // de generatie deterministisch. Loopt vloeiend op naar normaal.
+  if (index < INTRO_ROWS) {
+    const ease = index / INTRO_ROWS // 0..1
+    speed *= 0.42 + 0.58 * ease // rustiger verkeer, versnelt geleidelijk
+    if (kind === 'road') gap *= 1.7 - 0.7 * ease // meer ruimte tussen de boten
+    else gap *= 0.66 + 0.34 * ease // dichter platform-dek op het water: veiliger
+  }
   const count = Math.ceil((width + objW) / gap) + 1
   const L = count * gap
   const dir: 1 | -1 = rng() < 0.5 ? 1 : -1
@@ -179,7 +191,13 @@ function generateUpTo(w: World, upTo: number): void {
       w.rowsSincePier = 0
       w.segTarget = segDanger(estimateCrossingsAt(index))
     } else {
-      lane = makeLane(index, chooseDangerKind(w.rng), estimateCrossingsAt(index), w.rng, w.width)
+      // Onboarding: de eerste rijen zijn kades (road), niet het water. Op een kade
+      // is stilstaan veilig, dus je leert de besturing zonder meteen te verdrinken;
+      // pas daarna komen de ponten. chooseDangerKind wordt nog steeds aangeroepen
+      // zodat de RNG-stroom hetzelfde blijft voor de rest van de generatie.
+      const danger = chooseDangerKind(w.rng)
+      const kind = index < INTRO_ROWS ? 'road' : danger
+      lane = makeLane(index, kind, estimateCrossingsAt(index), w.rng, w.width)
       w.rowsSincePier++
     }
     w.lanes.set(index, lane)

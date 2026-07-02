@@ -38,6 +38,7 @@ export class Sfx {
 
   hop(): void {
     this.blip(420, 0.09, 'square', 0.04)
+    this.buzz(10)
   }
 
   coin(): void {
@@ -47,6 +48,25 @@ export class Sfx {
 
   splash(): void {
     this.blip(180, 0.32, 'sawtooth', 0.05)
+    this.buzz(30)
+  }
+
+  /** Kort vrolijk deuntje bij een nieuw record (drie stijgende tonen). */
+  record(): void {
+    this.blip(660, 0.1, 'triangle', 0.05)
+    setTimeout(() => this.blip(880, 0.1, 'triangle', 0.05), 90)
+    setTimeout(() => this.blip(1320, 0.16, 'triangle', 0.05), 190)
+    this.buzz([12, 40, 12])
+  }
+
+  /** Lichte trilling op ondersteunde toestellen; volgt dezelfde mute-instelling. */
+  private buzz(pattern: number | number[]): void {
+    if (this.muted) return
+    try {
+      navigator.vibrate?.(pattern)
+    } catch {
+      /* niet ondersteund: negeren */
+    }
   }
 
   close(): void {

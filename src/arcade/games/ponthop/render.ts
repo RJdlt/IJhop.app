@@ -60,6 +60,41 @@ function skyPalette(hour: number): { top: string; bot: string; dark: number } {
   return { top: lerpHex(a.top, b.top, t), bot: lerpHex(a.bot, b.bot, t), dark: a.dark + (b.dark - a.dark) * t }
 }
 
+// Water-gradient is duur om elke frame te maken; cache 'm per maat en per
+// 2-minuten-tijdvak (de dag/nacht-kleur verandert traag). Scheelt allocaties
+// en GC-hikjes, wat helpt om 60fps vast te houden.
+interface SkyCache {
+  key: string
+  grad: CanvasGradient
+  sky: { top: string; bot: string; dark: number }
+}
+let skyCache: SkyCache | null = null
+function getSky(ctx: CanvasRenderingContext2D, width: number, height: number): SkyCache {
+  const d = new Date()
+  const bucket = Math.floor((d.getHours() * 60 + d.getMinutes()) / 2)
+  const key = `${width}x${height}@${bucket}`
+  if (!skyCache || skyCache.key !== key) {
+    const sky = skyPalette(d.getHours() + d.getMinutes() / 60)
+    const grad = ctx.createLinearGradient(0, 0, 0, height)
+    grad.addColorStop(0, sky.top)
+    grad.addColorStop(1, sky.bot)
+    skyCache = { key, grad, sky }
+  }
+  return skyCache
+}
+
+let vigCache: { key: string; grad: CanvasGradient } | null = null
+function getVignette(ctx: CanvasRenderingContext2D, width: number, height: number, dark: number): CanvasGradient {
+  const key = `${width}x${height}@${Math.round(dark * 20)}`
+  if (!vigCache || vigCache.key !== key) {
+    const grad = ctx.createRadialGradient(width / 2, height * 0.42, height * 0.25, width / 2, height * 0.5, height * 0.8)
+    grad.addColorStop(0, 'rgba(0,0,0,0)')
+    grad.addColorStop(1, `rgba(2,12,22,${(0.16 + dark * 0.22).toFixed(3)})`)
+    vigCache = { key, grad }
+  }
+  return vigCache.grad
+}
+
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   const rad = Math.min(r, w / 2, h / 2)
   ctx.beginPath()
@@ -102,21 +137,9 @@ export function render(
 
   ctx.clearRect(0, 0, width, height)
   // Water-basis kleurt mee met het echte Amsterdamse moment (dag/nacht/gouden uur).
-  const nowD = new Date()
-  const sky = skyPalette(nowD.getHours() + nowD.getMinutes() / 60)
-  const wg = ctx.createLinearGradient(0, 0, 0, height)
-  wg.addColorStop(0, sky.top)
-  wg.addColorStop(1, sky.bot)
+  const { grad: wg, sky } = getSky(ctx, width, height)
   ctx.fillStyle = wg
   ctx.fillRect(0, 0, width, height)
-  // 's Nachts een zachte maanlicht-streep op het water.
-  if (sky.dark > 0.55) {
-    const ml = ctx.createLinearGradient(0, 0, 0, height)
-    ml.addColorStop(0, `rgba(220,235,255,${0.10 * sky.dark})`)
-    ml.addColorStop(1, 'rgba(220,235,255,0)')
-    ctx.fillStyle = ml
-    ctx.fillRect(width * 0.5 - 34, 0, 68, height)
-  }
 
   // Schermschud: alleen de wereld-laag (banen + speler) schuift mee, de water-
   // basis en het vignet blijven staan zodat er geen lege randen ontstaan.
@@ -133,7 +156,7 @@ export function render(
     const lane = w.lanes.get(r)
     if (!lane) continue
     const bandTop = sy(r * ROW_H + ROW_H / 2)
-    drawLaneBackground(ctx, lane, width, bandTop)
+    drawLaneBackground(ctx, lane, width, bandTop, t)
   }
   for (let r = firstRow; r <= lastRow; r++) {
     const lane = w.lanes.get(r)
@@ -143,16 +166,19 @@ export function render(
     if (lane.coinX !== null && !lane.coinTaken) drawCoin(ctx, lane.coinX, bandTop + ROW_H / 2)
   }
 
-  // Zacht diepte-vignet voor focus (subtiel donkerder naar de randen).
-  const vg = ctx.createRadialGradient(width / 2, height * 0.42, height * 0.25, width / 2, height * 0.5, height * 0.8)
-  vg.addColorStop(0, 'rgba(0,0,0,0)')
-  vg.addColorStop(1, `rgba(2,12,22,${(0.16 + sky.dark * 0.22).toFixed(3)})`)
-  ctx.fillStyle = vg
+  // Zacht diepte-vignet voor focus (subtiel donkerder naar de randen). Gecachet
+  // zodat we niet elke frame een radiale gradient hoeven op te bouwen.
+  ctx.fillStyle = getVignette(ctx, width, height, sky.dark)
   ctx.fillRect(0, 0, width, height)
 
-  // Vloeiend stuitertje: licht de speler even op na elke beweging.
-  const lift = Math.sin(w.hopAnim * Math.PI) * 7
-  drawPlayer(ctx, w.player.x, sy(playerWorldY(w)) - lift, onSafeGround(w), skin)
+  // Vloeiend stuitertje + squash & stretch: bij de afzet rekt het figuurtje uit
+  // (smaller en hoger), op het hoogste punt van de hop het sterkst, en het zakt
+  // vloeiend terug naar normaal. Geen lineaire animatie: de sinus geeft ease-in/out.
+  const a = Math.sin(w.hopAnim * Math.PI) // 0 -> 1 -> 0 over de hop
+  const lift = a * 7
+  const sqx = 1 - 0.16 * a
+  const sqy = 1 + 0.22 * a
+  drawPlayer(ctx, w.player.x, sy(playerWorldY(w)) - lift, onSafeGround(w), skin, sqx, sqy)
 
   if (shaken) ctx.restore()
 
@@ -172,7 +198,7 @@ function onSafeGround(w: World): boolean {
   return platformUnder(lane, w.t, w.player.x) !== null
 }
 
-function drawLaneBackground(ctx: CanvasRenderingContext2D, lane: Lane, width: number, top: number) {
+function drawLaneBackground(ctx: CanvasRenderingContext2D, lane: Lane, width: number, top: number, t: number) {
   if (lane.kind === 'pier') {
     const pg = ctx.createLinearGradient(0, top, 0, top + ROW_H)
     pg.addColorStop(0, '#EFC79A')
@@ -211,6 +237,18 @@ function drawLaneBackground(ctx: CanvasRenderingContext2D, lane: Lane, width: nu
       ctx.beginPath()
       ctx.arc(x + (lane.index % 2 ? 17 : 0), top + ROW_H * 0.32, 7, Math.PI * 0.15, Math.PI * 0.85)
       ctx.stroke()
+    }
+    // Levend water: een paar glinsteringen die traag opzij drijven en pulseren.
+    // Fase per baan verschilt (lane.index) zodat het niet als een raster oogt.
+    const drift = (t * 9 + lane.index * 40) % (width + 40)
+    for (let i = 0; i < 3; i++) {
+      const gx = ((drift + i * ((width + 40) / 3)) % (width + 40)) - 20
+      const gy = top + ROW_H * (0.3 + 0.34 * ((i + lane.index) % 3) / 2)
+      const tw = 0.5 + 0.5 * Math.sin(t * 2.2 + i * 2 + lane.index)
+      ctx.fillStyle = `rgba(255,255,255,${(0.06 + tw * 0.12).toFixed(3)})`
+      ctx.beginPath()
+      ctx.ellipse(gx, gy, 6, 1.6, 0, 0, Math.PI * 2)
+      ctx.fill()
     }
   }
 }
@@ -366,21 +404,33 @@ function drawPlayer(
   y: number,
   safe: boolean,
   skin: Skin,
+  sqx = 1,
+  sqy = 1,
 ) {
   const r = PLAYER_HALF
   const hy = y - 6 // hoofd-midden
   const isCat = skin.kind === 'pontkat'
 
-  // schaduw
+  // schaduw (blijft op de grond, verbreedt licht mee bij een squash)
   ctx.fillStyle = 'rgba(0,0,0,0.2)'
   ctx.beginPath()
-  ctx.ellipse(x, y + r - 2, r, 6, 0, 0, Math.PI * 2)
+  ctx.ellipse(x, y + r - 2, r * sqx, 6, 0, 0, Math.PI * 2)
   ctx.fill()
 
-  // lijf (gevaar = donkerder)
+  // Squash & stretch rond de voeten: het figuurtje blijft met de grond verbonden.
+  const feet = y + r
+  ctx.save()
+  ctx.translate(x, feet)
+  ctx.scale(sqx, sqy)
+  ctx.translate(-x, -feet)
+
+  // lijf (gevaar = donkerder), met een dunne donkere rand voor contrast in fel licht
   ctx.fillStyle = safe ? skin.bodyColor : darken(skin.bodyColor, 0.4)
   rr(ctx, x - 12, y - 2, 24, 18, 6)
   ctx.fill()
+  ctx.lineWidth = 1.5
+  ctx.strokeStyle = 'rgba(12,22,28,0.3)'
+  ctx.stroke()
 
   // hoofd (kat heeft een vacht-kleurige kop)
   ctx.fillStyle = isCat ? skin.bodyColor : '#FFE0B8'
@@ -388,7 +438,7 @@ function drawPlayer(
   ctx.arc(x, hy, r, 0, Math.PI * 2)
   ctx.fill()
   ctx.lineWidth = 1.5
-  ctx.strokeStyle = 'rgba(0,0,0,0.10)'
+  ctx.strokeStyle = 'rgba(12,22,28,0.28)'
   ctx.stroke()
 
   // hoofddeksel / accessoire per poppetje
@@ -512,6 +562,8 @@ function drawPlayer(
     ctx.fillStyle = '#fff'
     ctx.fillRect(x + 4, cy - 2, 4, 2)
   }
+
+  ctx.restore() // einde squash & stretch-transform
 }
 
 function drawIdleHint(ctx: CanvasRenderingContext2D, width: number, height: number) {

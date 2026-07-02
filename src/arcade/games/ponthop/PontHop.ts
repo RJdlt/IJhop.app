@@ -1,5 +1,5 @@
 import type { GameInitOpts, GameModule, GameState, InputAction } from '../../types'
-import { createWorld, resizeWorld, worldHop, worldStep } from './engine'
+import { createWorld, resizeWorld, worldHop, worldStep, PLAYER_HALF } from './engine'
 import type { World } from './engine'
 import { render, playerScreen } from './render'
 import type { Skin } from './render'
@@ -41,11 +41,56 @@ export function createPontHop(): GameModule {
   let skin: Skin = { kind: 'pim', capColor: '#F08A24', bodyColor: '#15616D' }
   const sfx = new Sfx()
   const fx = new Fx()
+  // Beste score deze sessie: bepaalt wanneer het record-deuntje speelt.
+  let sessionBest = 0
+  // Hit-stop-timer: korte bevriezing bij dood vóór het game-over-scherm.
+  let hitStopTimer: ReturnType<typeof setTimeout> | null = null
+  // Voortschrijdend gemiddelde van de frametijd, voor het effect-budget bij lage fps.
+  let smoothDt = 0.016
+
+  /** Rond de run af: beloningen verrekenen en het game-over-scherm openen.
+   *  Wordt na de hit-stop-bevriezing aangeroepen. */
+  const endRun = () => {
+    hitStopTimer = null
+    if (!world || !opts) return
+    const run = { crossings: world.crossings, coins: world.coins }
+    const reward = runReward(run)
+    const before = loadProfile()
+    const profile = applyRunResult(before, run)
+    // Dagelijkse uitdaging bijwerken; net gehaald = extra stroopwafels.
+    const chal = recordChallenge({ coins: world.coins, crossings: world.crossings, score: world.score })
+    if (chal.justCompleted && chal.reward > 0) profile.wallet += chal.reward
+    // Combo-bonus: extra wafels voor stroopwafels op rij gepakt.
+    if (comboBonus > 0) profile.wallet += comboBonus
+    saveProfile(profile)
+    // Mijlpaal-poppetjes die door deze run zijn vrijgespeeld.
+    const unlocked = CHARACTERS.filter((c) => !isUnlocked(before, c) && isUnlocked(profile, c))
+    const lines = [
+      { label: 'Level', value: String(runLevel(world.crossings)) },
+      { label: 'Bonus 🧇', value: `+${reward}` },
+      { label: 'Totaal 🧇', value: String(profile.wallet) },
+      ...unlocked.map((c) => ({ label: '🎉 Vrijgespeeld', value: `${c.emoji} ${c.name.nl}` })),
+    ]
+    if (comboBonus > 0) lines.push({ label: '🔥 Combo', value: `+${comboBonus} 🧇` })
+    if (chal.justCompleted) lines.push({ label: '🎯 Uitdaging', value: `+${chal.reward} 🧇` })
+    // Persoonlijk sessierecord: kort deuntje na de plons.
+    if (world.score > sessionBest) {
+      sessionBest = world.score
+      setTimeout(() => sfx.record(), 220)
+    }
+    opts.onGameOver(world.score, lines)
+  }
 
   const frame = (now: number) => {
     if (!world || !ctx || !opts || state !== 'running') return
     const dt = lastT ? (now - lastT) / 1000 : 0
     lastT = now
+    // Effect-budget: bij een gezonde framerate volle effecten, bij haperingen
+    // (frametijd te hoog) schalen we deeltjes terug om 60fps te beschermen.
+    if (dt > 0 && dt < 0.1) {
+      smoothDt = smoothDt * 0.9 + dt * 0.1
+      fx.setScale(smoothDt > 0.021 ? 0.5 : smoothDt > 0.0185 ? 0.75 : 1)
+    }
 
     const wasSafe = !world.over
     worldStep(world, dt)
@@ -82,35 +127,19 @@ export function createPontHop(): GameModule {
 
     if (world.over && wasSafe) {
       state = 'over'
-      sfx.splash()
-      {
-        const p = playerScreen(world)
-        fx.splash(p.x, p.y)
-        fx.draw(ctx)
-      }
       cancelAnimationFrame(raf)
-      // Bonus-stroopwafels (verzamelde munten + afstand) in de spaarpot.
-      const run = { crossings: world.crossings, coins: world.coins }
-      const reward = runReward(run)
-      const before = loadProfile()
-      const profile = applyRunResult(before, run)
-      // Dagelijkse uitdaging bijwerken; net gehaald = extra stroopwafels.
-      const chal = recordChallenge({ coins: world.coins, crossings: world.crossings, score: world.score })
-      if (chal.justCompleted && chal.reward > 0) profile.wallet += chal.reward
-      // Combo-bonus: extra wafels voor stroopwafels op rij gepakt.
-      if (comboBonus > 0) profile.wallet += comboBonus
-      saveProfile(profile)
-      // Mijlpaal-poppetjes die door deze run zijn vrijgespeeld.
-      const unlocked = CHARACTERS.filter((c) => !isUnlocked(before, c) && isUnlocked(profile, c))
-      const lines = [
-        { label: 'Level', value: String(runLevel(world.crossings)) },
-        { label: 'Bonus 🧇', value: `+${reward}` },
-        { label: 'Totaal 🧇', value: String(profile.wallet) },
-        ...unlocked.map((c) => ({ label: '🎉 Vrijgespeeld', value: `${c.emoji} ${c.name.nl}` })),
-      ]
-      if (comboBonus > 0) lines.push({ label: '🔥 Combo', value: `+${comboBonus} 🧇` })
-      if (chal.justCompleted) lines.push({ label: '🎯 Uitdaging', value: `+${chal.reward} 🧇` })
-      opts.onGameOver(world.score, lines)
+      const p = playerScreen(world)
+      // Hit-stop: de plons + een korte witte flits bevriezen ~70ms in beeld,
+      // zodat de klap voelbaar is, en pas daarna opent het game-over-scherm.
+      fx.splash(p.x, p.y)
+      render(ctx, world, skin, fx.shakeOffset())
+      fx.draw(ctx)
+      ctx.save()
+      ctx.fillStyle = 'rgba(255,255,255,0.45)'
+      ctx.fillRect(0, 0, opts.width, opts.height)
+      ctx.restore()
+      sfx.splash()
+      hitStopTimer = setTimeout(endRun, 70)
       return
     }
     raf = requestAnimationFrame(frame)
@@ -129,6 +158,7 @@ export function createPontHop(): GameModule {
     lastCoinT = -99
     comboBonus = 0
     lastT = 0
+    smoothDt = 0.016
     fx.clear()
     opts.onScoreChange(0)
     state = 'running'
@@ -160,9 +190,17 @@ export function createPontHop(): GameModule {
     stop() {
       state = 'idle'
       cancelAnimationFrame(raf)
+      if (hitStopTimer) {
+        clearTimeout(hitStopTimer)
+        hitStopTimer = null
+      }
     },
     destroy() {
       cancelAnimationFrame(raf)
+      if (hitStopTimer) {
+        clearTimeout(hitStopTimer)
+        hitStopTimer = null
+      }
       sfx.close()
       ctx = null
       opts = null
@@ -172,6 +210,12 @@ export function createPontHop(): GameModule {
       if (state !== 'running' || !world) return
       worldHop(world, action)
       if (action !== 'down') sfx.hop()
+      // Landing op het water (op een pont/SUP): een kleine plons voor gevoel.
+      const lane = world.lanes.get(world.player.row)
+      if (lane && (lane.kind === 'water-ferry' || lane.kind === 'water-sup')) {
+        const p = playerScreen(world)
+        fx.waterSplash(p.x, p.y + PLAYER_HALF - 2)
+      }
     },
     getScore() {
       return world?.score ?? 0

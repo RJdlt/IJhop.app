@@ -34,14 +34,32 @@ export class Fx {
   private shake = 0
   // Eenvoudige, deterministisch-genoeg pseudo-jitter voor de schud-offset.
   private tphase = 0
+  // Effect-budget: harde bovengrens op deeltjes, plus een schaal (0.3..1) die de
+  // GameModule terugdraait als de framerate zakt. Zo blijven effecten binnen budget.
+  private static readonly MAX_PARTS = 220
+  private scale = 1
+
+  /** Schaal het aantal nieuwe deeltjes (0.3..1). Lager = goedkoper bij lage fps. */
+  setScale(s: number): void {
+    this.scale = Math.max(0.3, Math.min(1, s))
+  }
+
+  private cnt(n: number): number {
+    return Math.max(1, Math.round(n * this.scale))
+  }
+
+  private add(p: Particle): void {
+    if (this.parts.length >= Fx.MAX_PARTS) return
+    this.parts.push(p)
+  }
 
   /** Stroopwafel opgepakt: gouden sprankels + zwevende "+score", combo kleurt op. */
   coinBurst(x: number, y: number, combo: number): void {
-    const n = 8 + Math.min(combo, 6) * 2
+    const n = this.cnt(8 + Math.min(combo, 6) * 2)
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2
       const sp = 40 + Math.random() * 120
-      this.parts.push({
+      this.add({
         x,
         y,
         vx: Math.cos(a) * sp,
@@ -56,6 +74,26 @@ export class Fx {
     this.addShake(2.5)
   }
 
+  /** Landing vlak bij water: een paar blauwe druppels omhoog, geen schud. */
+  waterSplash(x: number, y: number): void {
+    const n = this.cnt(7)
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.9
+      const sp = 40 + Math.random() * 90
+      this.add({
+        x: x + (Math.random() - 0.5) * 14,
+        y,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 20,
+        life: 0.32 + Math.random() * 0.22,
+        max: 0.55,
+        size: 1.5 + Math.random() * 2,
+        color: Math.random() < 0.5 ? '#CFEFFB' : '#8FD1EE',
+        gravity: 480,
+      })
+    }
+  }
+
   /** Zwevende tekst (bijv. "+3 🧇" of "Combo x3!"). */
   popText(x: number, y: number, text: string, color = '#FFE9A8', size = 18): void {
     this.texts.push({ x, y, vy: -46, life: 1, max: 1, text, color, size })
@@ -64,10 +102,11 @@ export class Fx {
   /** Overtocht gehaald: groene confetti-sprankels omhoog. */
   crossingBurst(x: number, y: number): void {
     const colors = ['#3FD68C', '#FFD24A', '#7FE1FF', '#FF9EC4']
-    for (let i = 0; i < 22; i++) {
+    const n = this.cnt(22)
+    for (let i = 0; i < n; i++) {
       const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.5
       const sp = 120 + Math.random() * 200
-      this.parts.push({
+      this.add({
         x: x + (Math.random() - 0.5) * 40,
         y,
         vx: Math.cos(a) * sp,
@@ -84,10 +123,11 @@ export class Fx {
 
   /** Kopje onder: plons van blauwwitte druppels + stevige schud. */
   splash(x: number, y: number): void {
-    for (let i = 0; i < 26; i++) {
+    const n = this.cnt(26)
+    for (let i = 0; i < n; i++) {
       const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2
       const sp = 60 + Math.random() * 220
-      this.parts.push({
+      this.add({
         x,
         y,
         vx: Math.cos(a) * sp,
