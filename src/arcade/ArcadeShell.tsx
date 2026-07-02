@@ -312,7 +312,7 @@ export function ArcadeShell({
     : `absolute inset-0 justify-start overflow-y-auto ${panelBase}`
   const overClass = pageMode
     ? `relative flex w-full flex-col items-center gap-4 ${arcadeBg} p-6 text-center text-white`
-    : `absolute inset-0 flex flex-col items-center justify-center gap-4 ${arcadeBg} p-6 text-center text-white`
+    : `absolute inset-0 flex flex-col items-center justify-start gap-4 overflow-y-auto ${arcadeBg} p-6 text-center text-white`
 
   return (
     <div ref={wrapRef} className={rootClass}>
