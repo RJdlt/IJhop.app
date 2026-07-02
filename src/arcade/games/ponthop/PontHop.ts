@@ -1,9 +1,10 @@
 import type { GameInitOpts, GameModule, GameState, InputAction } from '../../types'
 import { createWorld, resizeWorld, worldHop, worldStep } from './engine'
 import type { World } from './engine'
-import { render } from './render'
+import { render, playerScreen } from './render'
 import type { Skin } from './render'
 import { Sfx } from './audio'
+import { Fx } from './fx'
 import {
   applyRunResult,
   CHARACTERS,
@@ -29,8 +30,17 @@ export function createPontHop(): GameModule {
   let raf = 0
   let lastT = 0
   let lastScore = 0
+  let lastCoins = 0
+  let lastCrossings = 0
+  // Combo: opeenvolgende stroopwafels binnen het venster stapelen op en geven
+  // bonus-wafels. Puur belonend; de score-engine blijft ongemoeid.
+  let combo = 0
+  let lastCoinT = -99
+  let comboBonus = 0
+  const COMBO_WINDOW = 2.6
   let skin: Skin = { kind: 'pim', capColor: '#F08A24', bodyColor: '#15616D' }
   const sfx = new Sfx()
+  const fx = new Fx()
 
   const frame = (now: number) => {
     if (!world || !ctx || !opts || state !== 'running') return
@@ -39,18 +49,45 @@ export function createPontHop(): GameModule {
 
     const wasSafe = !world.over
     worldStep(world, dt)
+    fx.update(dt)
+
+    // Stroopwafel opgepakt: sprankels, combo en zwevende "+3".
+    if (world.coins > lastCoins) {
+      const p = playerScreen(world)
+      combo = world.t - lastCoinT <= COMBO_WINDOW ? combo + 1 : 1
+      lastCoinT = world.t
+      const bonus = combo - 1
+      comboBonus += bonus
+      sfx.coin()
+      fx.coinBurst(p.x, p.y, combo)
+      fx.popText(p.x, p.y - 20, '+3 🧇')
+      if (combo >= 2) fx.popText(p.x, p.y - 44, `Combo x${combo}!`, combo >= 4 ? '#FFD24A' : '#8FE9C0', 15)
+      lastCoins = world.coins
+    }
+    // Overtocht gehaald: confetti + juichtekst.
+    if (world.crossings > lastCrossings) {
+      const p = playerScreen(world)
+      fx.crossingBurst(p.x, p.y)
+      fx.popText(p.x, p.y - 24, 'Overtocht! 🎉', '#8FE9C0', 16)
+      lastCrossings = world.crossings
+    }
 
     if (world.score !== lastScore) {
-      if (world.score > lastScore) sfx.coin()
       lastScore = world.score
       opts.onScoreChange(world.score)
     }
 
-    render(ctx, world, skin)
+    render(ctx, world, skin, fx.shakeOffset())
+    fx.draw(ctx)
 
     if (world.over && wasSafe) {
       state = 'over'
       sfx.splash()
+      {
+        const p = playerScreen(world)
+        fx.splash(p.x, p.y)
+        fx.draw(ctx)
+      }
       cancelAnimationFrame(raf)
       // Bonus-stroopwafels (verzamelde munten + afstand) in de spaarpot.
       const run = { crossings: world.crossings, coins: world.coins }
@@ -60,6 +97,8 @@ export function createPontHop(): GameModule {
       // Dagelijkse uitdaging bijwerken; net gehaald = extra stroopwafels.
       const chal = recordChallenge({ coins: world.coins, crossings: world.crossings, score: world.score })
       if (chal.justCompleted && chal.reward > 0) profile.wallet += chal.reward
+      // Combo-bonus: extra wafels voor stroopwafels op rij gepakt.
+      if (comboBonus > 0) profile.wallet += comboBonus
       saveProfile(profile)
       // Mijlpaal-poppetjes die door deze run zijn vrijgespeeld.
       const unlocked = CHARACTERS.filter((c) => !isUnlocked(before, c) && isUnlocked(profile, c))
@@ -69,6 +108,7 @@ export function createPontHop(): GameModule {
         { label: 'Totaal 🧇', value: String(profile.wallet) },
         ...unlocked.map((c) => ({ label: '🎉 Vrijgespeeld', value: `${c.emoji} ${c.name.nl}` })),
       ]
+      if (comboBonus > 0) lines.push({ label: '🔥 Combo', value: `+${comboBonus} 🧇` })
       if (chal.justCompleted) lines.push({ label: '🎯 Uitdaging', value: `+${chal.reward} 🧇` })
       opts.onGameOver(world.score, lines)
       return
@@ -83,7 +123,13 @@ export function createPontHop(): GameModule {
     skin = { kind: character.id, capColor: character.capColor, bodyColor: character.bodyColor }
     world = createWorld({ width: opts.width, height: opts.height, seed: (Date.now() & 0xffffffff) >>> 0 })
     lastScore = 0
+    lastCoins = 0
+    lastCrossings = 0
+    combo = 0
+    lastCoinT = -99
+    comboBonus = 0
     lastT = 0
+    fx.clear()
     opts.onScoreChange(0)
     state = 'running'
     cancelAnimationFrame(raf)

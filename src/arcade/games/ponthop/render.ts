@@ -94,6 +94,7 @@ export function render(
   ctx: CanvasRenderingContext2D,
   w: World,
   skin: Skin = DEFAULT_SKIN,
+  shake?: { x: number; y: number },
 ): void {
   const { width, height, cameraY, t } = w
   // worldY -> schermY (hoger in de wereld = hoger in beeld)
@@ -115,6 +116,14 @@ export function render(
     ml.addColorStop(1, 'rgba(220,235,255,0)')
     ctx.fillStyle = ml
     ctx.fillRect(width * 0.5 - 34, 0, 68, height)
+  }
+
+  // Schermschud: alleen de wereld-laag (banen + speler) schuift mee, de water-
+  // basis en het vignet blijven staan zodat er geen lege randen ontstaan.
+  const shaken = shake && (shake.x !== 0 || shake.y !== 0)
+  if (shaken) {
+    ctx.save()
+    ctx.translate(shake!.x, shake!.y)
   }
 
   const firstRow = Math.floor(cameraY / ROW_H) - 1
@@ -145,7 +154,15 @@ export function render(
   const lift = Math.sin(w.hopAnim * Math.PI) * 7
   drawPlayer(ctx, w.player.x, sy(playerWorldY(w)) - lift, onSafeGround(w), skin)
 
+  if (shaken) ctx.restore()
+
   if (w.started && w.idleFor > 2.5 && !w.over) drawIdleHint(ctx, width, height)
+}
+
+/** Schermpositie van de speler (voor deeltjes-effecten in de GameModule). */
+export function playerScreen(w: World): { x: number; y: number } {
+  const lift = Math.sin(w.hopAnim * Math.PI) * 7
+  return { x: w.player.x, y: w.height - (playerWorldY(w) - w.cameraY) - lift }
 }
 
 function onSafeGround(w: World): boolean {
