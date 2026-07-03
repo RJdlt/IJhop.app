@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { filterFerryAlerts } from './ferryAlerts'
-import type { FeedEntity } from './ferryAlerts'
+import { filterFerryAlerts } from '../../api/_lib/ferryAlerts.mjs'
+import type { FeedEntity } from '../../api/_lib/ferryAlerts.mjs'
 
 // Fixture naar het echte feed-formaat (gtfs.ovapi.nl/nl/alerts.pb, 3 juli 2026):
 // int64 als string, NL en EN samengevoegd met " -- ", informed_entity herhaald per halte.

@@ -1,14 +1,14 @@
 /**
  * Pure filterlogica voor GTFS-Realtime service alerts (NDOV/OVapi): haal uit
- * het landelijke feed de GVB-berichten die onze veersteigers raken. Draait
- * server-side in /api/storingen en wordt hier los getest. Geen protobuf-kennis:
- * werkt op het platte object dat de decoder oplevert (int64 als string).
+ * het landelijke feed de GVB-berichten die onze veersteigers raken.
  *
- * Zie docs/besluit-storingsbron.md voor het bronnenonderzoek en de regels.
+ * Bewust plain ESM-JavaScript: dit draait in de Vercel-functies (die met
+ * "type":"module" als ESM laden) en wordt door vitest los getest. Types staan
+ * in ferryAlerts.d.mts. Regels: docs/besluit-storingsbron.md
  */
 
-/** GTFS-stop-id -> onze stop-sleutel, voor alle veersteigers (uit timetable.json). */
-export const FERRY_STOP_IDS: Record<string, string> = {
+/** GTFS-stop-id -> onze stop-sleutel, voor alle zestien veersteigers. */
+export const FERRY_STOP_IDS = {
   '3979906': 'centraalstation',
   '3979702': 'sporenburg',
   '3980300': 'ijplein',
@@ -27,29 +27,22 @@ export const FERRY_STOP_IDS: Record<string, string> = {
   '3981106': 'velsenzuid',
 }
 
-interface Translation { text?: string | null; language?: string | null }
-export interface FeedEntity {
-  id: string
-  alert?: {
-    informedEntity?: { routeId?: string | null; stopId?: string | null }[] | null
-    activePeriod?: { start?: string | number | null; end?: string | number | null }[] | null
-    headerText?: { translation?: Translation[] | null } | null
-    descriptionText?: { translation?: Translation[] | null } | null
-  } | null
+/** Lijn -> steigers (compact duplicaat van timetable.json, alleen wat de
+ *  push-checker nodig heeft; bijwerken samen met FERRY_STOP_IDS). */
+export const FERRY_LINES = {
+  F1: ['zamenhofstraat', 'azartplein'],
+  F2: ['ijplein', 'centraalstation'],
+  F3: ['buiksloterweg', 'centraalstation'],
+  F4: ['centraalstation', 'ndsmwerf'],
+  F6: ['distelweg', 'pontsteiger'],
+  F7: ['ndsmwerf', 'pontsteiger'],
+  F9: ['sporenburg', 'zeeburgereiland'],
+  F20: ['hempontplein', 'zaandam'],
+  F21: ['assendelft', 'spaarndam'],
+  F22: ['velsenzuid', 'velsennoord'],
 }
 
-export interface FerryAlert {
-  id: string
-  /** NL-koptekst (deel voor de " -- "-scheiding van het feed). */
-  header: string
-  /** Geraakte veersteigers (onze stop-sleutels); leeg bij een tekst-match. */
-  stops: string[]
-  /** Unix-seconden, of null als de periode open is. */
-  start: number | null
-  end: number | null
-}
-
-const num = (v: string | number | null | undefined): number | null => {
+const num = (v) => {
   if (v == null) return null
   const n = Number(v)
   return Number.isFinite(n) && n > 0 ? n : null
@@ -57,15 +50,15 @@ const num = (v: string | number | null | undefined): number | null => {
 
 /** Pak de NL-tekst: voorkeur voor language 'nl', anders de eerste; knip het
  *  Engelse deel achter " -- " eraf. */
-function nlText(t?: { translation?: Translation[] | null } | null): string {
-  const list = t?.translation ?? []
+function nlText(t) {
+  const list = (t && t.translation) || []
   const nl = list.find((x) => x.language === 'nl') ?? list[0]
-  const raw = (nl?.text ?? '').trim()
+  const raw = ((nl && nl.text) || '').trim()
   return raw.split(' -- ')[0].trim()
 }
 
-/** Overlapt een van de periodes met nu (of start binnen 30 min)? Geen periode = actief. */
-function isActive(periods: { start?: string | number | null; end?: string | number | null }[] | null | undefined, nowSec: number): boolean {
+/** Overlapt een periode met nu (of start binnen 30 min)? Geen periode = actief. */
+function isActive(periods, nowSec) {
   if (!periods || periods.length === 0) return true
   return periods.some((p) => {
     const s = num(p.start)
@@ -79,13 +72,13 @@ function isActive(periods: { start?: string | number | null; end?: string | numb
 const FERRY_WORD = /\b(pont|veer|veerpont)\b/i
 
 /** Filter het volledige feed naar actieve GVB-veeralerts (max 5, nieuwste eerst). */
-export function filterFerryAlerts(entities: FeedEntity[], nowSec: number): FerryAlert[] {
-  const out: FerryAlert[] = []
+export function filterFerryAlerts(entities, nowSec) {
+  const out = []
   for (const e of entities) {
     if (!e.id.includes(':GVB:') || !e.alert) continue
     if (!isActive(e.alert.activePeriod, nowSec)) continue
 
-    const stopKeys = new Set<string>()
+    const stopKeys = new Set()
     for (const ie of e.alert.informedEntity ?? []) {
       const key = ie.stopId != null ? FERRY_STOP_IDS[String(ie.stopId)] : undefined
       if (key) stopKeys.add(key)
@@ -106,4 +99,12 @@ export function filterFerryAlerts(entities: FeedEntity[], nowSec: number): Ferry
   }
   out.sort((a, b) => (b.start ?? 0) - (a.start ?? 0))
   return out.slice(0, 5)
+}
+
+/** Welke lijnen raakt een alert? Lege stops = algemene veermelding = alle lijnen. */
+export function alertLines(alert) {
+  const all = Object.keys(FERRY_LINES)
+  if (!alert.stops || alert.stops.length === 0) return all
+  const hit = new Set(alert.stops)
+  return all.filter((line) => FERRY_LINES[line].some((s) => hit.has(s)))
 }
