@@ -59,6 +59,7 @@ const EVENT_META: Record<string, { emoji: string; label: string }> = {
   ontmoeting_matched: { emoji: '✨', label: 'Ontmoeting: gematcht' },
   ontmoeting_found: { emoji: '🙌', label: 'Ontmoeting: gevonden' },
   delay_report: { emoji: '⏱', label: 'Vertraging gemeld' },
+  share_score: { emoji: '📸', label: 'Score gedeeld' },
   push_subscribe: { emoji: '🔔', label: 'Pushmeldingen aan' },
   push_unsubscribe: { emoji: '🔕', label: 'Pushmeldingen uit' },
   push_subscribe_failed: { emoji: '⚠️', label: 'Push aanzetten mislukt' },

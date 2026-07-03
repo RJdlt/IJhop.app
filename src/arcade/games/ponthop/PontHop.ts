@@ -15,7 +15,7 @@ import {
   runReward,
   saveProfile,
 } from './profile'
-import { recordRun as recordChallenge } from './challenge'
+import { recordRun as recordChallenge, getChallengeState } from './challenge'
 
 /**
  * Pont Hop — Kapitein Pim steekt het IJ over: hop van steiger naar steiger,
@@ -72,7 +72,12 @@ export function createPontHop(): GameModule {
       ...unlocked.map((c) => ({ label: '🎉 Vrijgespeeld', value: `${c.emoji} ${c.name.nl}` })),
     ]
     if (comboBonus > 0) lines.push({ label: '🔥 Combo', value: `+${comboBonus} 🧇` })
-    if (chal.justCompleted) lines.push({ label: '🎯 Uitdaging', value: `+${chal.reward} 🧇` })
+    if (chal.justCompleted) {
+      lines.push({ label: '🎯 Uitdaging', value: `+${chal.reward} 🧇` })
+      // Lichte streak-viering: alleen tonen, nooit zeuren over gemiste dagen.
+      const streak = getChallengeState().streak
+      if (streak >= 2) lines.push({ label: '🔥 Streak', value: `${streak} dagen` })
+    }
     // Persoonlijk sessierecord: kort deuntje na de plons.
     if (world.score > sessionBest) {
       sessionBest = world.score

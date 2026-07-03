@@ -108,6 +108,9 @@ export interface Strings {
     thisWeek: string
     allTime: string
     thisCrossing: string
+    bestOfLine: string
+    shareScore: string
+    shareFail: string
     you: string
     shopTitle: string
     playerLevel: string
@@ -234,6 +237,9 @@ export const STRINGS: Record<Lang, Strings> = {
       thisWeek: 'Deze week',
       allTime: 'Aller-tijden',
       thisCrossing: 'Deze overtocht',
+      bestOfLine: 'Beste van de',
+      shareScore: 'Deel je score',
+      shareFail: 'Delen lukte niet',
       you: 'Jij',
       shopTitle: 'Poppetjes',
       playerLevel: 'Niveau',
@@ -358,6 +364,9 @@ export const STRINGS: Record<Lang, Strings> = {
       thisWeek: 'This week',
       allTime: 'All-time',
       thisCrossing: 'This crossing',
+      bestOfLine: 'Best of the',
+      shareScore: 'Share your score',
+      shareFail: 'Sharing failed',
       you: 'You',
       shopTitle: 'Characters',
       playerLevel: 'Level',

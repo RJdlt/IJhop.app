@@ -128,12 +128,14 @@ export function dedupeByPlayer(rows: ScoreRow[]): ScoreRow[] {
 }
 
 /** Haalt de toplijst op (beste per speler) plus jouw eigen rang.
- *  Met `room` beperkt tot één overtocht; zonder room is het de globale lijst. */
+ *  Met `room` beperkt tot één overtocht; met `roomPrefix` (bijv. "F4:") tot
+ *  alle overtochten van één lijn; zonder beide is het de globale lijst. */
 export async function topScores(
   gameId: string,
   period: Period = 'all',
   limit = 10,
   room?: string | null,
+  roomPrefix?: string | null,
 ): Promise<Board> {
   const client = supabase
   if (!client) return { rows: [] }
@@ -145,6 +147,7 @@ export async function topScores(
       .order('score', { ascending: false })
       .limit(300)
     if (room) query = query.eq('room', room)
+    else if (roomPrefix) query = query.like('room', `${roomPrefix}%`)
     const since = periodSince(period)
     if (since) query = query.gte('created_at', since)
 

@@ -310,6 +310,7 @@ export default function App() {
               menuExtra={ferryPicker}
               banner={ferryBanner}
               crossingRoom={crossingRoom}
+              watchedLine={watched?.line ?? null}
               crossingLabel={crossingLabel}
               crossingPlayers={crossingPlayers}
             />
@@ -341,6 +342,7 @@ export default function App() {
               menuExtra={ferryPicker}
               banner={ferryBanner}
               crossingRoom={crossingRoom}
+              watchedLine={watched?.line ?? null}
               crossingLabel={crossingLabel}
               crossingPlayers={crossingPlayers}
               onClose={() => setArcadeOpen(false)}

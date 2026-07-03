@@ -11,24 +11,29 @@ interface LeaderboardProps {
   reloadKey?: number
   /** Beperk tot één overtocht-kamer (verbergt de periode-tabs). */
   room?: string | null
+  /** Beperk tot alle overtochten van één lijn (bijv. "F4:"); vast op deze week. */
+  roomPrefix?: string | null
   /** Eigen kop (bijv. "Deze overtocht · F7 → NDSM"). */
   title?: ReactNode
 }
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-export function Leaderboard({ gameId, youName, reloadKey, room, title }: LeaderboardProps) {
+export function Leaderboard({ gameId, youName, reloadKey, room, roomPrefix, title }: LeaderboardProps) {
   const { t } = useI18n()
   const [period, setPeriod] = useState<Period>('all')
   const [board, setBoard] = useState<Board>({ rows: [] })
   const loadId = useRef(0)
-  const scoped = room != null
+  // Overtocht-lijst toont alles; lijn-lijst is bewust "deze week" (lokaal en
+  // haalbaar); alleen de globale lijst heeft periode-tabs.
+  const scoped = room != null || roomPrefix != null
 
   const load = useCallback(async () => {
     const id = ++loadId.current
-    const next = await topScores(gameId, scoped ? 'all' : period, 10, room)
+    const effPeriod: Period = room != null ? 'all' : roomPrefix != null ? 'week' : period
+    const next = await topScores(gameId, effPeriod, 10, room, roomPrefix)
     if (id === loadId.current) setBoard(next) // negeer verlate antwoorden
-  }, [gameId, period, room, scoped])
+  }, [gameId, period, room, roomPrefix])
 
   // Laden bij periode-/kamerwissel en na een afgerond potje.
   useEffect(() => {

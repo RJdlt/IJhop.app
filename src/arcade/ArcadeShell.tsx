@@ -11,6 +11,7 @@ import { getNickname, setNickname, NICK_MAX } from '../lib/nickname'
 import { hasProfanity, sanitizeName } from '../lib/profanity'
 import { track } from '../lib/analytics'
 import { PrizeEntry } from './PrizeEntry'
+import { shareScoreCard } from '../lib/shareCard'
 import { shouldOfferPrize, markPrizeSeen } from '../lib/prize'
 import { SponsorCard } from '../components/SponsorCard'
 import { DailyChallenge } from './DailyChallenge'
@@ -35,6 +36,8 @@ interface ArcadeShellProps {
   banner?: ReactNode
   /** Kamer van de gekozen overtocht; scores tellen dan ook in die lijst. */
   crossingRoom?: string | null
+  /** Lijn van de gekozen pont (bijv. "F4"): toont de weeklijst van die lijn. */
+  watchedLine?: string | null
   /** Korte omschrijving van de overtocht voor de kop (bijv. "F7 → NDSM"). */
   crossingLabel?: string
   /** Aantal spelers dat nu live op deze overtocht zit (presence). */
@@ -57,6 +60,7 @@ export function ArcadeShell({
   menuExtra,
   banner,
   crossingRoom,
+  watchedLine,
   crossingLabel,
   crossingPlayers,
   layout = 'fill',
@@ -338,6 +342,18 @@ export function ArcadeShell({
       />
     ) : null
 
+  // Weeklijst van de gekozen pontlijn: scores lokaal en sociaal laten voelen.
+  const makeLineBoard = (gameId: string) =>
+    watchedLine ? (
+      <Leaderboard
+        gameId={gameId}
+        youName={nick.trim()}
+        reloadKey={boardReload}
+        roomPrefix={`${watchedLine}:`}
+        title={`⛴️ ${t.arcade.bestOfLine} ${watchedLine} · ${t.arcade.thisWeek.toLowerCase()}`}
+      />
+    ) : null
+
   // Menu toont de standaardlijst; game-over volgt het gespeelde spel.
   const leaderboard = makeLeaderboard(BOARD_GAME)
   const crossingBoard = makeCrossingBoard(BOARD_GAME)
@@ -448,6 +464,7 @@ export function ArcadeShell({
           <DailyChallenge />
           {GAMES.map((g) => (g.MenuPanel ? <g.MenuPanel key={g.id} /> : null))}
           {crossingBoard}
+          {makeLineBoard(BOARD_GAME)}
           {leaderboard}
           {onClose && (
             <button
@@ -510,6 +527,22 @@ export function ArcadeShell({
             >
               {t.arcade.menu}
             </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const meta = getGame(playedGame)
+                const outcome = await shareScoreCard({
+                  score: result.score,
+                  gameTitle: meta?.title[lang] ?? 'IJhop Arcade',
+                  emoji: meta?.emoji ?? '🕹️',
+                  subline: result.isRecord ? `🏆 ${t.arcade.newRecord}` : undefined,
+                })
+                track('share_score', { game: playedGame, score: result.score, outcome })
+              }}
+              className="self-center rounded-full px-3 py-1.5 text-sm font-semibold text-white/60 transition hover:bg-white/5 hover:text-white/90"
+            >
+              📸 {t.arcade.shareScore}
+            </button>
           </div>
           {result.lines.length > 0 && (
             <div className="flex flex-wrap justify-center gap-2">
@@ -527,6 +560,7 @@ export function ArcadeShell({
           </p>
           {result.offerPrize && <PrizeEntry gameId={playedGame} score={result.score} />}
           {makeCrossingBoard(playedGame)}
+          {makeLineBoard(playedGame)}
           {makeLeaderboard(playedGame)}
           <SponsorCard variant="compact" />
         </div>
