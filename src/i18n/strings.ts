@@ -17,6 +17,13 @@ export interface Strings {
   swapDirection: string
   favorite: string
   otherFerries: string
+  // Storingen & vertragingen
+  disruption: string
+  delayAsk: string
+  delayThanks: string
+  delayAlready: string
+  delayCrowd: string
+  dismiss: string
   onbTitle: string
   onbSubtitle: string
   onbDone: string
@@ -125,6 +132,12 @@ export const STRINGS: Record<Lang, Strings> = {
     crossing: 'overtocht',
     swapDirection: 'Draai richting om',
     favorite: 'Favoriet',
+    disruption: 'Storing',
+    delayAsk: 'Vertraagd?',
+    delayThanks: 'Gemeld, dank je!',
+    delayAlready: 'Al gemeld',
+    delayCrowd: 'reizigers melden vertraging',
+    dismiss: 'Sluiten',
     otherFerries: 'Andere pontjes',
     onbTitle: 'Welke pontjes pak je het meest?',
     onbSubtitle: 'Zet ze als favoriet, dan houden we je scherm overzichtelijk. Aanpassen kan altijd via de ster.',
@@ -234,6 +247,12 @@ export const STRINGS: Record<Lang, Strings> = {
     crossing: 'crossing',
     swapDirection: 'Swap direction',
     favorite: 'Favourite',
+    disruption: 'Disruption',
+    delayAsk: 'Delayed?',
+    delayThanks: 'Reported, thanks!',
+    delayAlready: 'Already reported',
+    delayCrowd: 'travellers report a delay',
+    dismiss: 'Dismiss',
     otherFerries: 'Other ferries',
     onbTitle: 'Which ferries do you take most?',
     onbSubtitle: 'Set them as favourites to keep your screen tidy. You can always change it with the star.',

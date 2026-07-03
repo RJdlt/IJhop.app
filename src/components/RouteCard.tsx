@@ -1,10 +1,12 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useI18n } from '../i18n/i18n'
 import { clockCountdown, relativeLabel } from '../lib/format'
 import { LINES, STOPS, nextDepartures } from '../lib/schedule'
 import type { StopPair } from '../lib/schedule'
 import { getNickname } from '../lib/nickname'
 import { roomKeyFor, duelChannelFor } from '../lib/rooms'
+import { canReport, reportDelay } from '../lib/delayReports'
+import { track } from '../lib/analytics'
 import { usePresence } from '../hooks/usePresence'
 import { SwapIcon } from './icons'
 import { ReactionDuel } from './ReactionDuel'
@@ -29,6 +31,18 @@ export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap, favorit
   const nick = useMemo(() => getNickname(), [])
   const roomKey = roomKeyFor(connection)
   const waiters = usePresence(roomKey, userId, nick)
+
+  // Community-melding: één tik, anoniem, max één per lijn per 20 minuten.
+  const [delayState, setDelayState] = useState<'idle' | 'busy' | 'done' | 'cooldown'>(() =>
+    canReport(line) ? 'idle' : 'cooldown',
+  )
+  const onReportDelay = async () => {
+    if (delayState !== 'idle') return
+    setDelayState('busy')
+    const r = await reportDelay(line)
+    track('delay_report', { line, ok: r?.ok ?? false })
+    setDelayState('done')
+  }
 
   return (
     <section className="card animate-riseIn overflow-hidden">
@@ -107,6 +121,30 @@ export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap, favorit
           ))}
         </ul>
       )}
+
+      {/* Vertraagd? Eén subtiele actie; waarschuwt anderen anoniem. */}
+      <div className="flex justify-end border-t border-slate-100 px-5 py-1.5 dark:border-white/5">
+        <button
+          type="button"
+          onClick={onReportDelay}
+          disabled={delayState !== 'idle'}
+          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+            delayState === 'done'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : delayState === 'cooldown'
+                ? 'text-slate-300 dark:text-slate-600'
+                : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600 dark:hover:bg-white/5 dark:hover:text-slate-300'
+          }`}
+        >
+          {delayState === 'done'
+            ? `✓ ${t.delayThanks}`
+            : delayState === 'cooldown'
+              ? `✓ ${t.delayAlready}`
+              : delayState === 'busy'
+                ? '…'
+                : `⏱ ${t.delayAsk}`}
+        </button>
+      </div>
 
       {/* Realtime tik-duel: alleen als er minstens twee mensen meewachten */}
       {waiters >= 2 && (

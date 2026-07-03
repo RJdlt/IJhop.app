@@ -9,6 +9,7 @@ import { InstallPrompt } from './components/InstallPrompt'
 import { SponsorCard } from './components/SponsorCard'
 import { OntmoetingCard } from './components/OntmoetingCard'
 import { OnboardingFavorites } from './components/OnboardingFavorites'
+import { DisruptionBanner } from './components/DisruptionBanner'
 import { FerryPicker } from './components/FerryPicker'
 import type { FerryOption } from './components/FerryPicker'
 import { ArcadeShell } from './arcade/ArcadeShell'
@@ -231,6 +232,9 @@ export default function App() {
 
         {view === 'ferries' ? (
           <main className="flex flex-col gap-4">
+            {/* Alleen zichtbaar bij een echte storing of 2+ meldingen; laadt
+                parallel en houdt de aftelklok nooit op. */}
+            <DisruptionBanner favLines={favLines} />
             {(favLines.length > 0 ? favLines : LINE_IDS).map(renderRoute)}
             {favLines.length > 0 && otherLines.length > 0 && (
               <>
