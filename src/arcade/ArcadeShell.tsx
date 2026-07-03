@@ -494,6 +494,23 @@ export function ArcadeShell({
               {result.isRecord ? `🏆 ${t.arcade.newRecord}` : `${t.arcade.best}: ${result.high}`}
             </p>
           </div>
+          {/* Primaire actie direct onder de score: "nog een keer" zonder scrollen. */}
+          <div className="flex w-full max-w-xs flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => startGame(playedGame)}
+              className="rounded-2xl bg-gradient-to-r from-emerald-400 to-brand px-4 py-3.5 font-extrabold text-white shadow-[0_12px_34px_-8px_rgba(29,158,117,0.85)] transition active:scale-[0.99]"
+            >
+              🔁 {t.arcade.tryAgain}
+            </button>
+            <button
+              type="button"
+              onClick={backToMenu}
+              className="rounded-2xl bg-white/[0.06] px-4 py-3 font-semibold ring-1 ring-white/10 transition hover:bg-white/10"
+            >
+              {t.arcade.menu}
+            </button>
+          </div>
           {result.lines.length > 0 && (
             <div className="flex flex-wrap justify-center gap-2">
               {result.lines.map((l, i) => (
@@ -511,22 +528,6 @@ export function ArcadeShell({
           {result.offerPrize && <PrizeEntry gameId={playedGame} score={result.score} />}
           {makeCrossingBoard(playedGame)}
           {makeLeaderboard(playedGame)}
-          <div className="flex w-full max-w-xs flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => startGame(playedGame)}
-              className="rounded-2xl bg-gradient-to-r from-emerald-400 to-brand px-4 py-3.5 font-extrabold text-white shadow-[0_12px_34px_-8px_rgba(29,158,117,0.85)] transition active:scale-[0.99]"
-            >
-              🔁 {t.arcade.tryAgain}
-            </button>
-            <button
-              type="button"
-              onClick={backToMenu}
-              className="rounded-2xl bg-white/[0.06] px-4 py-3 font-semibold ring-1 ring-white/10 transition hover:bg-white/10"
-            >
-              {t.arcade.menu}
-            </button>
-          </div>
           <SponsorCard variant="compact" />
         </div>
       )}

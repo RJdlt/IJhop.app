@@ -19,6 +19,12 @@ export const FERRY_STOP_IDS: Record<string, string> = {
   '3980896': 'buiksloterweg',
   '3981381': 'azartplein',
   '3980087': 'distelweg',
+  '3980516': 'hempontplein',
+  '3981141': 'zaandam',
+  '3980233': 'assendelft',
+  '3980920': 'spaarndam',
+  '3981182': 'velsennoord',
+  '3981106': 'velsenzuid',
 }
 
 interface Translation { text?: string | null; language?: string | null }

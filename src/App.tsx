@@ -40,6 +40,7 @@ const DIRECTIONS: Record<LineId, [StopPair, StopPair]> = Object.fromEntries(
 )
 
 const FAV_KEY = 'ijhop:favlines'
+const FLIP_KEY = 'ijhop:flipped'
 
 // Onder deze grens toont het spel een opvallender (maar niet-blokkerend) tikje.
 const SOON_SECONDS = 60
@@ -72,10 +73,28 @@ export default function App() {
     track('tab_view', { view })
   }, [view])
 
-  const [flipped, setFlipped] = useState<Record<LineId, boolean>>(() =>
-    Object.fromEntries(LINE_IDS.map((l) => [l, false])),
-  )
-  const swap = (line: LineId) => setFlipped((f) => ({ ...f, [line]: !f[line] }))
+  // Richting per lijn (heen/terug), onthouden per browser: wie 's ochtends
+  // altijd de kant van Centraal op kijkt, ziet die richting ook na herstart.
+  const [flipped, setFlipped] = useState<Record<LineId, boolean>>(() => {
+    const base = Object.fromEntries(LINE_IDS.map((l) => [l, false]))
+    try {
+      const saved = JSON.parse(localStorage.getItem(FLIP_KEY) || '{}') as Record<string, boolean>
+      for (const k of Object.keys(saved)) if (k in base) base[k] = saved[k] === true
+    } catch {
+      /* faal stil */
+    }
+    return base
+  })
+  const swap = (line: LineId) =>
+    setFlipped((f) => {
+      const next = { ...f, [line]: !f[line] }
+      try {
+        localStorage.setItem(FLIP_KEY, JSON.stringify(next))
+      } catch {
+        /* faal stil */
+      }
+      return next
+    })
 
   // Favoriete pontjes (staan bovenaan). Onthouden per browser.
   const [favs, setFavs] = useState<Set<string>>(() => {

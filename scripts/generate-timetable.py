@@ -2,13 +2,14 @@
 """
 Regenerate src/data/timetable.json from the official Dutch GTFS feed.
 
-Keeps every GVB ferry line that runs *within Amsterdam* (both stops in Amsterdam),
-so F1, F2, F3, F4, F6, F7 and F9, and distils a weekly recurring pattern (one
-representative date per weekday) into a compact JSON. Stops outside Amsterdam
-(e.g. Zaandam, Assendelft, Velsen ferries) are left out on purpose.
+Keeps every GVB ferry line (route_type 4): the Amsterdam IJ-ferries F1..F9 plus
+the Noordzeekanaal ferries F20 (Hempont, Amsterdam-Zaandam), F21 (Buitenhuizen,
+Assendelft-Spaarndam) and F22 (Velserpont). Distils a weekly recurring pattern
+(one representative date per weekday) into a compact JSON.
 
 Usage:
     python3 scripts/generate-timetable.py
+    GTFS_ZIP=/pad/naar/gtfs-nl.zip python3 scripts/generate-timetable.py  # lokale zip
 
 Re-run whenever GVB publishes a new timetable (e.g. seasonal changes).
 """
@@ -23,6 +24,7 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "src", "data", "timetable.js
 LINE_COLOR = {
     "F1": "#1D9E75", "F2": "#00A0C6", "F3": "#F08A24", "F4": "#E2231A",
     "F6": "#E8909A", "F7": "#009DE0", "F9": "#7C3AED",
+    "F20": "#2563EB", "F21": "#65A30D", "F22": "#B45309",
 }
 
 
@@ -49,8 +51,13 @@ def col(header):
 
 
 def main() -> int:
-    print(f"Downloading {GTFS_URL} (~225 MB)…", file=sys.stderr)
-    zf = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(GTFS_URL, timeout=900).read()))
+    local = os.environ.get("GTFS_ZIP")
+    if local:
+        print(f"Using local {local}…", file=sys.stderr)
+        zf = zipfile.ZipFile(local)
+    else:
+        print(f"Downloading {GTFS_URL} (~225 MB)…", file=sys.stderr)
+        zf = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(GTFS_URL, timeout=900).read()))
 
     it = rows(zf, "routes.txt"); H = col(next(it))
     routes = {
@@ -85,9 +92,11 @@ def main() -> int:
     for r in it:
         if r[H["stop_id"]] in used:
             info[r[H["stop_id"]]] = {"name": r[H["stop_name"]], "lat": float(r[H["stop_lat"]]), "lon": float(r[H["stop_lon"]])}
-    is_ams = lambda sid: info[sid]["name"].startswith("Amsterdam")
-    disp = lambda sid: info[sid]["name"].replace("Amsterdam, ", "")
-    key = {s: slug(info[s]["name"]) for s in used}
+    # Toon de naam zonder plaats-prefix ("Zaandam, Zaandam" -> "Zaandam");
+    # de sleutel (slug) volgt de weergavenaam, zodat bestaande Amsterdamse
+    # sleutels identiek blijven (centraalstation, ndsmwerf, ...).
+    disp = lambda sid: info[sid]["name"].split(", ", 1)[-1]
+    key = {s: slug(disp(s)) for s in used}
 
     it = rows(zf, "calendar_dates.txt"); H = col(next(it))
     svc_dates = defaultdict(set)
@@ -110,8 +119,6 @@ def main() -> int:
             if not od:
                 continue
             o_sid, o_dep, d_sid, d_arr = od
-            if not (is_ams(o_sid) and is_ams(d_sid)):
-                continue
             o, d = key[o_sid], key[d_sid]
             if o == d:
                 continue
@@ -129,7 +136,8 @@ def main() -> int:
                     pairs[d["line"]].append(s)
             durs[d["line"]].append(d["dur"])
     lines = {}
-    for ln in sorted(lines_seen):
+    # Numeriek sorteren: F1..F9 (Amsterdam) eerst, daarna F20..F22 (Noordzeekanaal).
+    for ln in sorted(lines_seen, key=lambda x: int(x[1:])):
         ds = sorted(durs[ln]); md = ds[len(ds) // 2] if ds else 0
         lines[ln] = {"name": ln, "connects": pairs[ln][:2], "color": LINE_COLOR.get(ln, "#1D9E75"), "durationMin": md}
 
