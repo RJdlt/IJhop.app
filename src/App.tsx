@@ -23,7 +23,8 @@ import { startAnalytics, track } from './lib/analytics'
 import { useI18n } from './i18n/i18n'
 import { amsterdamMoment } from './lib/time'
 import { clockCountdown } from './lib/format'
-import { CONNECTIONS, LINES, LINE_IDS, STOPS, nextDepartures } from './lib/schedule'
+import { CONNECTIONS, LINES, LINE_IDS, STOPS, nextDepartures, timetable } from './lib/schedule'
+import { NotificationOptIn } from './components/NotificationOptIn'
 import type { StopPair } from './lib/schedule'
 import type { LineId } from './types'
 
@@ -66,6 +67,20 @@ export default function App() {
   // Nieuwe versie beschikbaar? Toon een verversen-knop i.p.v. vanzelf herladen.
   const [updateReady, setUpdateReady] = useState(false)
   useEffect(() => setupPwaAutoUpdate(() => setUpdateReady(true)), [])
+
+  // Offline-indicator: de klok werkt gewoon door (dienstregeling zit in de app),
+  // maar we zeggen eerlijk dat live storingsinfo nu niet ververst.
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
+  useEffect(() => {
+    const up = () => setOnline(true)
+    const down = () => setOnline(false)
+    window.addEventListener('online', up)
+    window.addEventListener('offline', down)
+    return () => {
+      window.removeEventListener('online', up)
+      window.removeEventListener('offline', down)
+    }
+  }, [])
 
   // Analytics: sessiestart + welke tab je bekijkt.
   useEffect(() => startAnalytics(), [])
@@ -251,6 +266,12 @@ export default function App() {
 
         {view === 'ferries' ? (
           <main className="flex flex-col gap-4">
+            {/* Offline: klok blijft werken op de ingebouwde dienstregeling. */}
+            {!online && (
+              <p className="animate-riseIn self-center rounded-full bg-slate-200/80 px-3.5 py-1.5 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                📡 {t.offlineNote} ({timetable.generated})
+              </p>
+            )}
             {/* Alleen zichtbaar bij een echte storing of 2+ meldingen; laadt
                 parallel en houdt de aftelklok nooit op. */}
             <DisruptionBanner favLines={favLines} />
@@ -277,6 +298,7 @@ export default function App() {
             />
             <CatchPanel nowSecondOfWeek={nowSecondOfWeek} />
             <InstallPrompt />
+            <NotificationOptIn favLines={favLines} />
             <SponsorCard />
           </main>
         ) : (

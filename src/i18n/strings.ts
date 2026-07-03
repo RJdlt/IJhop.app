@@ -24,6 +24,17 @@ export interface Strings {
   delayAlready: string
   delayCrowd: string
   dismiss: string
+  // Pushmeldingen
+  pushTitle: string
+  pushExplain: string
+  pushEnable: string
+  pushOff: string
+  pushOn: string
+  pushActiveFor: string
+  pushDenied: string
+  pushError: string
+  // Offline
+  offlineNote: string
   onbTitle: string
   onbSubtitle: string
   onbDone: string
@@ -138,6 +149,15 @@ export const STRINGS: Record<Lang, Strings> = {
     delayAlready: 'Al gemeld',
     delayCrowd: 'reizigers melden vertraging',
     dismiss: 'Sluiten',
+    pushTitle: 'Melding bij storing',
+    pushExplain: 'Krijg een seintje als jouw favoriete pont niet vaart. Alleen storingen, nooit reclame.',
+    pushEnable: 'Zet aan',
+    pushOff: 'Uit',
+    pushOn: 'Staat aan. Je hoort het als er iets is.',
+    pushActiveFor: 'Actief voor',
+    pushDenied: 'Meldingen zijn geblokkeerd in je browser. Zet ze aan via de site-instellingen.',
+    pushError: 'Aanzetten lukte niet. Probeer het later nog eens.',
+    offlineNote: 'Offline. Tijden volgens de vaste dienstregeling.',
     otherFerries: 'Andere pontjes',
     onbTitle: 'Welke pontjes pak je het meest?',
     onbSubtitle: 'Zet ze als favoriet, dan houden we je scherm overzichtelijk. Aanpassen kan altijd via de ster.',
@@ -253,6 +273,15 @@ export const STRINGS: Record<Lang, Strings> = {
     delayAlready: 'Already reported',
     delayCrowd: 'travellers report a delay',
     dismiss: 'Dismiss',
+    pushTitle: 'Disruption alerts',
+    pushExplain: 'Get a heads-up when your favourite ferry is not sailing. Disruptions only, never ads.',
+    pushEnable: 'Turn on',
+    pushOff: 'Off',
+    pushOn: 'Enabled. We will let you know if something is up.',
+    pushActiveFor: 'Active for',
+    pushDenied: 'Notifications are blocked in your browser. Enable them in the site settings.',
+    pushError: 'Could not enable. Please try again later.',
+    offlineNote: 'Offline. Times follow the regular timetable.',
     otherFerries: 'Other ferries',
     onbTitle: 'Which ferries do you take most?',
     onbSubtitle: 'Set them as favourites to keep your screen tidy. You can always change it with the star.',

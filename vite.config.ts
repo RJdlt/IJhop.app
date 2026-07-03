@@ -29,6 +29,9 @@ export default defineConfig({
       workbox: {
         // The whole timetable ships with the app, so the core works fully offline.
         globPatterns: ['**/*.{js,css,html,svg,png,json,woff2}'],
+        // Push-handlers los van de gegenereerde SW (public/push-sw.js), zodat
+        // web push werkt zonder de precache-opzet te verbouwen.
+        importScripts: ['push-sw.js'],
       },
     }),
   ],
