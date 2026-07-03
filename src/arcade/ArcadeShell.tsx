@@ -522,7 +522,7 @@ export function ArcadeShell({
             <button
               type="button"
               onClick={backToMenu}
-              className="rounded-2xl bg-white/[0.06] px-4 py-3 font-semibold ring-1 ring-white/10 backdrop-blur-md transition hover:bg-white/10"
+              className="rounded-2xl bg-white/[0.06] px-4 py-3 font-semibold ring-1 ring-white/10 transition hover:bg-white/10"
             >
               {t.arcade.menu}
             </button>

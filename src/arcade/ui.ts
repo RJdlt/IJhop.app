@@ -8,9 +8,12 @@
 export const arcadeBg =
   'bg-[radial-gradient(120%_90%_at_50%_-10%,#0c6b52_0%,#063f30_38%,#02140f_100%)]'
 
-// Glas-kaart (grote en zachtere variant).
-export const glass = 'rounded-3xl bg-white/[0.06] ring-1 ring-white/10 backdrop-blur-xl'
-export const glassSoft = 'rounded-2xl bg-white/[0.06] ring-1 ring-white/10 backdrop-blur-md'
+// Glas-kaart (grote en zachtere variant). Bewust GEEN backdrop-blur: deze
+// panelen staan op de ondoorzichtige arcade-achtergrond (er valt niets te
+// blurren) en gestapelde blur-lagen in een scrollende container bevriezen de
+// compositor op iOS Safari (schermen schilderen door elkaar en reageren niet).
+export const glass = 'rounded-3xl bg-white/[0.06] ring-1 ring-white/10'
+export const glassSoft = 'rounded-2xl bg-white/[0.06] ring-1 ring-white/10'
 
 // Primaire actie met glow.
 export const playPill =

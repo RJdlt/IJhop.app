@@ -289,7 +289,7 @@ export default function App() {
           (niet weggooit) en de countdown eronder onaangeroerd blijft. */}
       {view === 'ferries' && (
         <div
-          className={`fixed inset-0 z-30 bg-brand-dark/95 p-3 backdrop-blur transition-opacity duration-200 ${
+          className={`fixed inset-0 z-30 bg-brand-dark p-3 transition-opacity duration-200 ${
             arcadeOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
           aria-hidden={!arcadeOpen}
