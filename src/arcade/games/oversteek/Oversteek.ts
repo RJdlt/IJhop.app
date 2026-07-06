@@ -1,7 +1,7 @@
 import type { GameInitOpts, GameModule, GameState, InputAction } from '../../types'
-import { createOversteekWorld, resizeOversteekWorld, setPointer, stepOversteek, FERRY_Y } from './engine'
+import { createOversteekWorld, resizeOversteekWorld, setPointer, stepOversteek } from './engine'
 import type { OversteekWorld } from './engine'
-import { renderOversteek } from './render'
+import { renderOversteek, ferryScreenPosition } from './render'
 import { Sfx } from '../ponthop/audio'
 import { Fx } from '../../fx'
 import { getHighScore } from '../../scoreStore'
@@ -33,7 +33,7 @@ export function createOversteek(): GameModule {
   let wasHeld = false
   let skinId = 'klassiek'
 
-  const ferryScreen = (w: OversteekWorld) => ({ x: w.ferry.x, y: w.height * FERRY_Y })
+  const ferryScreen = (w: OversteekWorld) => ferryScreenPosition(w)
 
   const endRun = () => {
     hitStopTimer = null
