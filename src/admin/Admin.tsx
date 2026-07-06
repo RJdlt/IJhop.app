@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { LINES, STOPS } from '../lib/schedule'
 
 // ---- Types -----------------------------------------------------------------
 // Eén dashboard-RPC (migratie 0012) levert alles: consistent Europe/Amsterdam,
@@ -43,7 +44,7 @@ interface RecentEvent { name: string; props: Record<string, unknown> | null; pat
 interface AdminRow { user_id: string; email: string | null; created_at: string }
 interface InviteRow { id: string; email: string; status: string; expires_at: string; used_at: string | null; created_at: string }
 interface EntryRow { id: string; game_id: string; score: number; name: string | null; email: string; created_at: string }
-type Bar = { label: string; value: number; title?: string }
+type Bar = { label: string; value: number; title?: string; color?: string }
 
 // ---- Helpers ---------------------------------------------------------------
 const EVENT_META: Record<string, { emoji: string; label: string }> = {
@@ -166,7 +167,10 @@ function BarList({ rows, color = 'bg-brand' }: { rows: Bar[]; color?: string }) 
         <div key={r.label} className="flex items-center gap-2 text-sm" title={r.title}>
           <span className="w-28 shrink-0 truncate text-slate-600">{r.label}</span>
           <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-            <div className={`h-full rounded-full ${color}`} style={{ width: `${(r.value / max) * 100}%` }} />
+            <div
+              className={`h-full rounded-full ${r.color ? '' : color}`}
+              style={{ width: `${(r.value / max) * 100}%`, ...(r.color ? { backgroundColor: r.color } : {}) }}
+            />
           </div>
           <span className="w-12 shrink-0 text-right font-semibold tabular-nums text-slate-800">{nf(r.value)}</span>
         </div>
@@ -284,6 +288,34 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
     created_at: new Date(Date.now() - i * 3_600_000 * rnd(1, 40)).toISOString(),
   }))
   return { dash, recent, entries }
+}
+
+// ---- Pont-gebruik ------------------------------------------------------------
+// De `ferry_pick`-events slaan een sleutel op als "F4:centraalstation:ndsmwerf"
+// (lijn:van:naar). Voor de admin willen we twee dingen: de populairste LIJN
+// (beide richtingen samen) en, voor wie het fijnmaziger wil, de leesbare route.
+export function parseFerryKey(key: string): { line: string; from: string; to: string } | null {
+  const [line, from, to] = key.split(':')
+  return line && from && to ? { line, from, to } : null
+}
+export function ferryRouteLabel(key: string): string {
+  const p = parseFerryKey(key)
+  if (!p) return key
+  return `${p.line} · ${STOPS[p.from]?.name ?? p.from} → ${STOPS[p.to]?.name ?? p.to}`
+}
+/** Voegt de per-richting rijen uit de RPC samen tot één rij per pontlijn. */
+export function aggregateByLine(rows: PropRow[]): Bar[] {
+  const byLine = new Map<string, { users: number; events: number }>()
+  for (const r of rows) {
+    const line = parseFerryKey(r.value)?.line ?? r.value
+    const acc = byLine.get(line) ?? { users: 0, events: 0 }
+    acc.users += r.users
+    acc.events += r.events
+    byLine.set(line, acc)
+  }
+  return [...byLine.entries()]
+    .map(([line, v]) => ({ label: line, value: v.users, title: `${nf(v.events)} keer gekozen (beide richtingen)`, color: LINES[line]?.color }))
+    .sort((a, b) => b.value - a.value)
 }
 
 // ---- Hoofdcomponent ---------------------------------------------------------
@@ -549,6 +581,7 @@ export function Admin() {
       ]
     : []
   const funnelBase = Math.max(1, dash?.funnel.sessions ?? 0)
+  const lineUsage = dash ? aggregateByLine(dash.ferries) : []
   const skel = !firstLoaded
 
   return (
@@ -679,9 +712,14 @@ export function Admin() {
                 <BarList rows={dash.devices.map((r) => ({ label: deviceLabel(r.value), value: r.users }))} color="bg-violet-500" />
               </Gate>
             </Panel>
-            <Panel title="Gekozen pont (unieke gebruikers)" emoji="⛴️" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
+            <Panel title="Populairste pontlijn" emoji="🚤" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
               <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
-                <BarList rows={dash.ferries.map((r) => ({ label: r.value, value: r.users, title: `${nf(r.events)} keer gekozen` }))} color="bg-brand" />
+                <BarList rows={lineUsage} />
+              </Gate>
+            </Panel>
+            <Panel title="Gekozen route (unieke gebruikers)" emoji="⛴️" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
+              <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
+                <BarList rows={dash.ferries.map((r) => ({ label: ferryRouteLabel(r.value), value: r.users, title: `${nf(r.events)} keer gekozen` }))} color="bg-brand" />
               </Gate>
             </Panel>
             <Panel title="Gekozen poppetje (unieke gebruikers)" emoji="🧑" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
