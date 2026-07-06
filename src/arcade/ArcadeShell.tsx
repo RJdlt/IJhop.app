@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useI18n } from '../i18n/i18n'
 import { GAMES, getGame } from './registry'
-import { attachInput } from './input'
+import { attachInput, attachPointer } from './input'
 import type { InputHandle } from './input'
 import { getHighScore, recordScore } from './scoreStore'
 import { submitScore } from './leaderboard'
@@ -74,6 +74,8 @@ export function ArcadeShell({
   const moduleRef = useRef<GameModule | null>(null)
   const inputRef = useRef<InputHandle | null>(null)
   const optsRef = useRef<GameInitOpts | null>(null)
+  // Invoermodus van het lopende spel: discrete swipes of continu slepen.
+  const inputModeRef = useRef<'discrete' | 'continuous'>('discrete')
 
   const [screen, setScreen] = useState<Screen>('menu')
   // Welk spel er zojuist gespeeld is; bepaalt de ranglijst en 'opnieuw' op het
@@ -155,7 +157,10 @@ export function ArcadeShell({
     if (inputRef.current || !canvasRef.current) return
     const mod = moduleRef.current
     if (!mod) return
-    inputRef.current = attachInput(canvasRef.current, (a) => mod.onInput(a))
+    inputRef.current =
+      inputModeRef.current === 'continuous'
+        ? attachPointer(canvasRef.current, (nx, held) => mod.onPointer?.(nx, held))
+        : attachInput(canvasRef.current, (a) => mod.onInput(a))
   }, [])
 
   /** Wis het tekenvlak, zodat geen oud game-frame achter het menu blijft staan. */
@@ -184,6 +189,7 @@ export function ArcadeShell({
       const canvas = canvasRef.current
       if (!meta || !canvas) return
       setPlayedGame(id)
+      inputModeRef.current = meta.inputMode ?? 'discrete'
       prevHighRef.current = getHighScore(id)
       recordShownRef.current = false
       setRecordToast(false)
@@ -203,7 +209,7 @@ export function ArcadeShell({
             setRecordToast(true)
           }
         },
-        onGameOver: (s, lines) => {
+        onGameOver: (s, lines, analyticsMeta) => {
           const { high, isRecord } = recordScore(id, s)
           detachInput()
           // Beslis één keer of we de prijs-uitnodiging tonen (stabiel voor dit
@@ -212,7 +218,7 @@ export function ArcadeShell({
           if (offerPrize) markPrizeSeen()
           setResult({ score: s, high, isRecord, lines: lines ?? [], offerPrize })
           setScreen('over')
-          track('game_over', { game: id, score: s, isRecord })
+          track('game_over', { game: id, score: s, isRecord, ...(analyticsMeta ?? {}) })
           // Score insturen (ook getagd met de overtocht) en lijsten verversen.
           submitScore(id, nickRef.current.trim() || getNickname(), s, crossingRef.current).then(
             () => setBoardReload((k) => k + 1),

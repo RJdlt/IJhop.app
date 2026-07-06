@@ -94,3 +94,64 @@ export function attachInput(target: HTMLElement, rawDispatch: Dispatch): InputHa
     },
   }
 }
+
+/**
+ * Continue aanraak-besturing (slepen), voor spellen met `inputMode:
+ * 'continuous'` (bijv. een boot besturen) in plaats van discrete swipes.
+ * Gebruikt de Pointer Events API zodat muis (desktop-testen), pen en touch
+ * allemaal hetzelfde pad volgen. `onPointer(nx, held)` krijgt de x-positie
+ * genormaliseerd (0..1) binnen het element, en of er nu aangeraakt wordt.
+ */
+export function attachPointer(target: HTMLElement, onPointer: (nx: number, held: boolean) => void): InputHandle {
+  let lastNx = 0.5
+  let held = false
+
+  const nxFrom = (clientX: number): number => {
+    const rect = target.getBoundingClientRect()
+    if (rect.width <= 0) return lastNx
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+  }
+
+  const onDown = (e: PointerEvent) => {
+    held = true
+    lastNx = nxFrom(e.clientX)
+    onPointer(lastNx, true)
+  }
+  const onMove = (e: PointerEvent) => {
+    if (!held) return
+    e.preventDefault()
+    lastNx = nxFrom(e.clientX)
+    onPointer(lastNx, true)
+  }
+  const onUp = () => {
+    if (!held) return
+    held = false
+    onPointer(lastNx, false)
+  }
+  const onKeyDown = (e: KeyboardEvent) => {
+    // Pijltjes voor desktop-testen: kleine stapjes op de laatst bekende x.
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault()
+    lastNx = Math.max(0, Math.min(1, lastNx + (e.key === 'ArrowLeft' ? -0.06 : 0.06)))
+    held = true
+    onPointer(lastNx, true)
+  }
+
+  target.addEventListener('pointerdown', onDown)
+  target.addEventListener('pointermove', onMove, { passive: false })
+  target.addEventListener('pointerup', onUp)
+  target.addEventListener('pointercancel', onUp)
+  target.addEventListener('pointerleave', onUp)
+  window.addEventListener('keydown', onKeyDown)
+
+  return {
+    detach() {
+      target.removeEventListener('pointerdown', onDown)
+      target.removeEventListener('pointermove', onMove)
+      target.removeEventListener('pointerup', onUp)
+      target.removeEventListener('pointercancel', onUp)
+      target.removeEventListener('pointerleave', onUp)
+      window.removeEventListener('keydown', onKeyDown)
+    },
+  }
+}

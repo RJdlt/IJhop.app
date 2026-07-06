@@ -1,7 +1,8 @@
 import type { GameMeta } from './types'
 import { createPontHop } from './games/ponthop/PontHop'
-import { createVeer } from './games/veer/Veer'
+import { createOversteek } from './games/oversteek/Oversteek'
 import { CharacterShop } from './games/ponthop/CharacterShop'
+import { SkinPicker } from './games/oversteek/SkinPicker'
 
 /**
  * De enige plek waar spellen geregistreerd worden. Een tweede spel toevoegen
@@ -17,11 +18,13 @@ export const GAMES: GameMeta[] = [
     MenuPanel: CharacterShop,
   },
   {
-    id: 'veer',
+    id: 'oversteek',
     emoji: '⛴️',
-    title: { nl: 'Vaar de Pont', en: 'Steer the Ferry' },
-    tagline: { nl: 'NDSM naar Centraal over het IJ', en: 'NDSM to Centraal across the IJ' },
-    create: createVeer,
+    title: { nl: 'De Oversteek', en: 'The Crossing' },
+    tagline: { nl: 'Sleep, versnel en vervoer passagiers', en: 'Drag, throttle and ferry passengers' },
+    create: createOversteek,
+    MenuPanel: SkinPicker,
+    inputMode: 'continuous',
   },
 ]
 

@@ -31,8 +31,9 @@ export interface GameInitOpts {
   dpr: number
   /** Roep aan zodra de score wijzigt. */
   onScoreChange: (score: number) => void
-  /** Roep aan bij game-over met de eindscore en optioneel extra regels. */
-  onGameOver: (score: number, lines?: GameOverLine[]) => void
+  /** Roep aan bij game-over met de eindscore, optioneel extra regels voor het
+   *  scherm en optioneel extra analytics-velden (bijv. streak, skin). */
+  onGameOver: (score: number, lines?: GameOverLine[], analyticsMeta?: Record<string, unknown>) => void
 }
 
 export interface GameModule {
@@ -44,7 +45,12 @@ export interface GameModule {
   stop(): void
   /** Maak alle resources vrij (timers, RAF). Na destroy is het spel onbruikbaar. */
   destroy(): void
+  /** Discrete swipe/tik-invoer (hop-achtige spellen). Verplicht, ook als een
+   *  spel alleen `onPointer` gebruikt: implementeer 'm dan als no-op. */
   onInput(action: InputAction): void
+  /** Continue aanraak-invoer (sleep-besturing). Alleen aangeroepen als
+   *  `GameMeta.inputMode === 'continuous'`. `nx` is 0..1 binnen het tekenvlak. */
+  onPointer?(nx: number, held: boolean): void
   getScore(): number
   getState(): GameState
   /** Het tekenvlak is van maat veranderd (rotatie, resize). Maten in CSS-pixels. */
@@ -64,4 +70,7 @@ export interface GameMeta {
   /** Optioneel React-paneel op het menu (bijv. een shop/poppetjes-keuze).
    *  Houdt de shell generiek: spellen leveren hun eigen menu-UI. */
   MenuPanel?: ComponentType
+  /** 'discrete' (default): swipe/tik naar `onInput`. 'continuous': doorlopend
+   *  slepen naar `onPointer` (bijv. een boot besturen). */
+  inputMode?: 'discrete' | 'continuous'
 }
