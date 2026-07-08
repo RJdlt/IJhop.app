@@ -8,7 +8,11 @@ import { LINES, STOPS } from '../lib/schedule'
 // Eén dashboard-RPC (migratie 0012) levert alles: consistent Europe/Amsterdam,
 // test-events uitgesloten, dagen zonder events als echte nullen.
 interface Daily { day: string; users: number; sessions: number; events: number }
-interface PropRow { value: string; users: number; events: number }
+// `value` komt uit `props->>'key'` (of ->>'view'/'id') op vrije JSONB: als het
+// veld in de events-tabel letterlijk JSON null was (bijv. een gewiste
+// pont-keuze), levert Postgres hier SQL NULL. Dus altijd string | null, nooit
+// aangenomen dat het een goedgevormde string is.
+interface PropRow { value: string | null; users: number; events: number }
 interface Dash {
   quality: {
     last_event_at: string | null
@@ -94,17 +98,25 @@ function ago(iso: string): string {
 function clock(d: Date | null): string {
   return d ? d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'nooit'
 }
-function propSummary(p: Record<string, unknown> | null): string {
+export function propSummary(p: Record<string, unknown> | null): string {
   if (!p) return ''
-  if ('score' in p) return `score ${p.score}`
-  if ('view' in p) return String(p.view)
-  if ('key' in p) return String(p.key)
-  if ('id' in p) return String(p.id)
-  if ('game' in p) return String(p.game)
+  // Vrije JSONB: een veld kan aanwezig maar letterlijk null zijn. Sla zulke
+  // velden over in plaats van de string "null" te tonen.
+  for (const key of ['score', 'view', 'key', 'id', 'game'] as const) {
+    const v = p[key]
+    if (v === null || v === undefined || v === '') continue
+    return key === 'score' ? `score ${v}` : String(v)
+  }
   return ''
 }
-const deviceLabel = (v: string) =>
-  v === 'true' ? 'PWA (geïnstalleerd)' : v === 'false' ? 'Browser' : v
+// Nette placeholder voor een prop-waarde die ontbreekt, leeg of null is
+// (bijv. een gewiste pont-keuze): nooit crashen, nooit "null" tonen.
+const UNKNOWN_LABEL = 'Onbekend'
+export function safeLabel(v: string | null | undefined, fallback = UNKNOWN_LABEL): string {
+  return typeof v === 'string' && v.length > 0 ? v : fallback
+}
+export const deviceLabel = (v: string | null) =>
+  v === 'true' ? 'PWA (geïnstalleerd)' : v === 'false' ? 'Browser' : safeLabel(v)
 
 // ---- UI bouwstenen ---------------------------------------------------------
 const ACCENTS: Record<string, string> = {
@@ -296,20 +308,33 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
 // De `ferry_pick`-events slaan een sleutel op als "F4:centraalstation:ndsmwerf"
 // (lijn:van:naar). Voor de admin willen we twee dingen: de populairste LIJN
 // (beide richtingen samen) en, voor wie het fijnmaziger wil, de leesbare route.
-export function parseFerryKey(key: string): { line: string; from: string; to: string } | null {
-  const [line, from, to] = key.split(':')
+//
+// `props` is vrije JSONB en niets erin is gegarandeerd: een pont-keuze wissen
+// (FerryPicker "geen keuze", of nogmaals op de actieve keuze tikken) stuurt
+// `track('ferry_pick', { key: null })` (App.tsx `chooseWatch`). Dat komt als
+// een echte rij met `value: null` terug uit `analytics_dashboard` (de RPC
+// filtert alleen op "veld aanwezig", niet op "waarde niet-null"). Elke helper
+// hier accepteert daarom expliciet `string | null | undefined` en crasht nooit.
+export function parseFerryKey(key: string | null | undefined): { line: string; from: string; to: string } | null {
+  if (typeof key !== 'string' || key.length === 0) return null
+  const parts = key.split(':')
+  if (parts.length !== 3) return null // altijd precies lijn:van:naar, zie connKey in App.tsx
+  const [line, from, to] = parts
   return line && from && to ? { line, from, to } : null
 }
-export function ferryRouteLabel(key: string): string {
+export function ferryRouteLabel(key: string | null | undefined): string {
   const p = parseFerryKey(key)
-  if (!p) return key
-  return `${p.line} · ${STOPS[p.from]?.name ?? p.from} → ${STOPS[p.to]?.name ?? p.to}`
+  if (p) return `${p.line} · ${STOPS[p.from]?.name ?? p.from} → ${STOPS[p.to]?.name ?? p.to}`
+  return safeLabel(key)
 }
-/** Voegt de per-richting rijen uit de RPC samen tot één rij per pontlijn. */
+/** Voegt de per-richting rijen uit de RPC samen tot één rij per pontlijn.
+ *  Rijen zonder (of met een misvormde) sleutel belanden allemaal samen onder
+ *  "Onbekend" (nooit de ruwe, mogelijk rommelige waarde als aparte bucket),
+ *  in plaats van het dashboard te laten crashen. */
 export function aggregateByLine(rows: PropRow[]): Bar[] {
   const byLine = new Map<string, { users: number; events: number }>()
   for (const r of rows) {
-    const line = parseFerryKey(r.value)?.line ?? r.value
+    const line = parseFerryKey(r.value)?.line ?? UNKNOWN_LABEL
     const acc = byLine.get(line) ?? { users: 0, events: 0 }
     acc.users += r.users
     acc.events += r.events
@@ -706,7 +731,7 @@ export function Admin() {
             </Panel>
             <Panel title="Welke tab (unieke gebruikers)" emoji="🧭" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
               <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
-                <BarList rows={dash.tabs.map((t) => ({ label: t.value === 'arcade' ? 'Spelletjes' : t.value === 'ferries' ? 'Ponten' : t.value, value: t.users, title: `${nf(t.events)} keer bekeken` }))} color="bg-sky-500" />
+                <BarList rows={dash.tabs.map((t) => ({ label: t.value === 'arcade' ? 'Spelletjes' : t.value === 'ferries' ? 'Ponten' : safeLabel(t.value), value: t.users, title: `${nf(t.events)} keer bekeken` }))} color="bg-sky-500" />
               </Gate>
             </Panel>
             <Panel title="Welk apparaat (unieke gebruikers)" emoji="📱" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
@@ -726,7 +751,7 @@ export function Admin() {
             </Panel>
             <Panel title="Gekozen poppetje (unieke gebruikers)" emoji="🧑" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
               <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
-                <BarList rows={dash.characters.map((r) => ({ label: r.value, value: r.users }))} color="bg-amber-500" />
+                <BarList rows={dash.characters.map((r) => ({ label: safeLabel(r.value), value: r.users }))} color="bg-amber-500" />
               </Gate>
             </Panel>
             <Panel title="Live activiteit" emoji="📡">
