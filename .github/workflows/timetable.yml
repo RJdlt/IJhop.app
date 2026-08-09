@@ -1,0 +1,89 @@
+# Maandelijkse dienstregeling-check.
+#
+# GVB publiceert seizoenswijzigingen (zomer-/winterdienst) in het landelijke
+# GTFS-feed. De app scheept een statische snapshot (src/data/timetable.json)
+# mee, dus die veroudert stilletjes. Deze workflow regenereert de snapshot
+# elke maand en pusht alleen als er echt iets veranderd is; Vercel deployt
+# dan vanzelf. De zomertijd/wintertijd-KLOK is hier geen onderdeel van: die
+# gaat runtime automatisch goed via Intl met Europe/Amsterdam (src/lib/time.ts).
+#
+# Handmatig draaien kan altijd via "Run workflow" (workflow_dispatch).
+name: Dienstregeling verversen
+
+on:
+  schedule:
+    # Elke 1e van de maand om 04:12 UTC (rustig tijdstip, niet op het hele uur
+    # zodat we niet meepieken met ieders cron-jobs richting de GTFS-server).
+    - cron: '12 4 1 * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenereer timetable.json uit het verse GTFS-feed
+        run: python3 scripts/generate-timetable.py
+
+      - name: Sanity-check (nooit een kapotte dienstregeling pushen)
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          t = json.load(open('src/data/timetable.json'))
+          lines = t['lines']
+          sailings = sum(len(v) for v in t['schedule'].values())
+          problems = []
+          if len(lines) < 7:
+              problems.append(f'te weinig lijnen: {len(lines)}')
+          if sailings < 5000:
+              problems.append(f'verdacht weinig afvaarten/week: {sailings}')
+          for name, l in lines.items():
+              if len(l.get('connects', [])) != 2:
+                  problems.append(f'lijn {name} heeft geen 2 steigers')
+          if problems:
+              print('GEWEIGERD:', '; '.join(problems))
+              sys.exit(1)
+          print(f'OK: {len(lines)} lijnen, {sailings} afvaarten/week, gegenereerd {t["generated"]}')
+          EOF
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build en tests (vangt schema-breuken in de nieuwe data)
+        run: |
+          npm ci
+          npx vitest run
+          npm run build
+
+      - name: Commit en push alleen bij een echte wijziging
+        run: |
+          # Het 'generated'-veld verandert bij elke run; vergelijk de inhoud
+          # zonder dat veld, anders committen we elke maand alleen een datum.
+          # De check staat IN de if-conditie: Actions draait bash met -e, dus
+          # een losse niet-nul exit zou de stap anders meteen afbreken.
+          if python3 - <<'EOF'
+          import json, subprocess, sys
+          new = json.load(open('src/data/timetable.json'))
+          old_raw = subprocess.run(
+              ['git', 'show', 'HEAD:src/data/timetable.json'],
+              capture_output=True, text=True, check=True).stdout
+          old = json.loads(old_raw)
+          old.pop('generated', None); new.pop('generated', None)
+          sys.exit(1 if old != new else 0)
+          EOF
+          then
+            echo "Dienstregeling inhoudelijk ongewijzigd; niets te pushen."
+            git checkout -- src/data/timetable.json
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/timetable.json
+          git commit -m "Dienstregeling automatisch ververst (maandelijkse GTFS-check)"
+          git push
