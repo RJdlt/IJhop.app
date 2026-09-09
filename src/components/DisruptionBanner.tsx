@@ -28,6 +28,34 @@ function saveDismissed(s: Set<string>) {
   }
 }
 
+// ---- Links in storingsteksten -------------------------------------------------
+// KV15-teksten verwijzen naar sites als "Meer info: 9292.nl" of "Details:
+// gvb.nl"; die horen klikbaar te zijn. Bewust een TLD-allowlist: KV15-teksten
+// missen soms de spatie na een punt ("staking.Meer info") en dat mag nooit
+// per ongeluk een link worden. Leestekens aan het eind horen bij de zin.
+const URL_RE = /(?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:nl|com|net|org|eu|be|de|info)(?:\/[^\s]*)?/gi
+
+export interface LinkSegment {
+  text: string
+  href?: string
+}
+
+/** Splits een storingstekst in gewone stukken en klikbare links (puur, testbaar). */
+export function splitLinks(text: string): LinkSegment[] {
+  const out: LinkSegment[] = []
+  let last = 0
+  for (const m of text.matchAll(URL_RE)) {
+    const trimmed = m[0].replace(/[.,;:!?)]+$/, '')
+    if (!trimmed) continue
+    const idx = m.index ?? 0
+    if (idx > last) out.push({ text: text.slice(last, idx) })
+    out.push({ text: trimmed, href: /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}` })
+    last = idx + trimmed.length
+  }
+  if (last < text.length) out.push({ text: text.slice(last) })
+  return out
+}
+
 interface DisruptionBannerProps {
   /** Favoriete lijnen; leeg = alles is relevant. */
   favLines: string[]
@@ -130,7 +158,24 @@ export function DisruptionBanner({ favLines }: DisruptionBannerProps) {
               {t.disruption} · GVB
               {affectedLines(a).length < 7 ? ` · ${affectedLines(a).join(', ')}` : ''}
             </p>
-            <p className="mt-0.5 text-sm text-amber-900 dark:text-amber-100">{a.header}</p>
+            <p className="mt-0.5 text-sm text-amber-900 dark:text-amber-100">
+              {splitLinks(a.header).map((s, i) =>
+                s.href ? (
+                  <a
+                    key={i}
+                    href={s.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => track('disruption_link', { url: s.href })}
+                    className="font-semibold underline underline-offset-2 hover:text-amber-700 dark:hover:text-amber-50"
+                  >
+                    {s.text}
+                  </a>
+                ) : (
+                  <span key={i}>{s.text}</span>
+                ),
+              )}
+            </p>
             {updatedAt && (
               <p className="mt-1 text-[11px] text-amber-700/70 dark:text-amber-300/60">
                 {t.lastUpdated} {stamp(updatedAt)}

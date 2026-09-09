@@ -72,6 +72,7 @@ const EVENT_META: Record<string, { emoji: string; label: string }> = {
   push_subscribe_failed: { emoji: '⚠️', label: 'Push aanzetten mislukt' },
   disruption_shown: { emoji: '🚧', label: 'Storingsbanner getoond' },
   disruption_dismiss: { emoji: '🙈', label: 'Storingsbanner gesloten' },
+  disruption_link: { emoji: '🔗', label: 'Storingslink aangeklikt' },
   heartbeat: { emoji: '💓', label: 'Actief' },
   app_visible: { emoji: '👀', label: 'App actief' },
   app_hidden: { emoji: '🌙', label: 'App naar achtergrond' },
