@@ -52,7 +52,58 @@ const otherOperator: FeedEntity = {
   },
 }
 
+// Naar het echte stakings-alert van 9 september 2026 (KV15:GVB:2026-09-05:1076):
+// 1070 informed stops, geen enkele veersteiger, tekst zonder "pont" of "veer",
+// NL/EN gescheiden met " --|" en '|' als regeleinde. Dit miste het filter eerst.
+const strikeAlert: FeedEntity = {
+  id: 'KV15:GVB:2026-09-05:1076',
+  alert: {
+    informedEntity: Array.from({ length: 80 }, (_, i) => ({ stopId: String(5000000 + i) })),
+    activePeriod: [{ start: String(NOW - 3600), end: String(NOW + 3600) }],
+    headerText: {
+      translation: [
+        { text: 'Vandaag landelijke ov-staking.|Meer info: 9292.nl --|Today, nationwide public transport strike.' },
+      ],
+    },
+  },
+}
+const pluralAlert: FeedEntity = {
+  id: 'KV15:GVB:2026-09-05:1090',
+  alert: {
+    informedEntity: [{ routeId: '152401' }],
+    activePeriod: [],
+    headerText: { translation: [{ text: 'De ponten varen vandaag een aangepaste dienstregeling.' }] },
+  },
+}
+
 describe('filterFerryAlerts', () => {
+  it('herkent een netwerkbrede staking zonder veersteigers of veer-woorden', () => {
+    const r = filterFerryAlerts([strikeAlert], NOW)
+    expect(r).toHaveLength(1)
+    expect(r[0].stops).toEqual([]) // leeg = alle lijnen geraakt
+    // Engelse staart eraf, pipes vervangen door spaties.
+    expect(r[0].header).toBe('Vandaag landelijke ov-staking. Meer info: 9292.nl')
+  })
+
+  it('herkent ook het trefwoord staking bij een klein aantal haltes', () => {
+    const klein: FeedEntity = {
+      ...strikeAlert,
+      id: 'KV15:GVB:2026-09-05:1099',
+      alert: { ...strikeAlert.alert, informedEntity: [{ stopId: '5000001' }] },
+    }
+    expect(filterFerryAlerts([klein], NOW)).toHaveLength(1)
+  })
+
+  it('matcht meervouden als "ponten" in de tekst', () => {
+    const r = filterFerryAlerts([pluralAlert], NOW)
+    expect(r).toHaveLength(1)
+    expect(r[0].stops).toEqual([])
+  })
+
+  it('laat een gewoon bus-alert met een handvol haltes nog steeds weg', () => {
+    expect(filterFerryAlerts([busAlert], NOW)).toHaveLength(0)
+  })
+
   it('matcht op veersteiger-stop-ids en vertaalt naar stop-sleutels', () => {
     const r = filterFerryAlerts([busAlert, ferryStopAlert], NOW)
     expect(r).toHaveLength(1)

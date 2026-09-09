@@ -48,13 +48,14 @@ const num = (v) => {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
-/** Pak de NL-tekst: voorkeur voor language 'nl', anders de eerste; knip het
- *  Engelse deel achter " -- " eraf. */
+/** Pak de NL-tekst: voorkeur voor language 'nl', anders de eerste. KV15 plakt
+ *  NL en EN aan elkaar met " -- " of " --|" en gebruikt '|' als regeleinde;
+ *  knip het Engelse deel eraf en maak van de pipes gewone spaties. */
 function nlText(t) {
   const list = (t && t.translation) || []
   const nl = list.find((x) => x.language === 'nl') ?? list[0]
   const raw = ((nl && nl.text) || '').trim()
-  return raw.split(' -- ')[0].trim()
+  return raw.split(/\s--(?:\s|\|)/)[0].replace(/\|/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 /** Overlapt een periode met nu (of start binnen 30 min)? Geen periode = actief. */
@@ -69,7 +70,13 @@ function isActive(periods, nowSec) {
   })
 }
 
-const FERRY_WORD = /\b(pont|veer|veerpont)\b/i
+// Ook de meervouden: een stakingsbericht zegt eerder "ponten"/"veren" dan "pont".
+const FERRY_WORD = /\b(pont|ponten|veerpont|veerponten|veer|veren)\b/i
+// Netwerkbrede berichten (staking, algehele uitval) noemen de veren vaak niet
+// en taggen alleen bus/tram/metro-haltes; herken ze aan het trefwoord of aan
+// de breedte: een GVB-alert dat zoveel haltes tegelijk raakt is netwerkbreed.
+const NETWORK_WORD = /\b(staking|stakingen|geen vervoer|gehele netwerk)\b/i
+const NETWORK_STOP_THRESHOLD = 60
 
 /** Filter het volledige feed naar actieve GVB-veeralerts (max 5, nieuwste eerst). */
 export function filterFerryAlerts(entities, nowSec) {
@@ -79,13 +86,26 @@ export function filterFerryAlerts(entities, nowSec) {
     if (!isActive(e.alert.activePeriod, nowSec)) continue
 
     const stopKeys = new Set()
+    const allStops = new Set()
     for (const ie of e.alert.informedEntity ?? []) {
-      const key = ie.stopId != null ? FERRY_STOP_IDS[String(ie.stopId)] : undefined
+      if (ie.stopId == null) continue
+      const sid = String(ie.stopId)
+      allStops.add(sid)
+      const key = FERRY_STOP_IDS[sid]
       if (key) stopKeys.add(key)
     }
     const header = nlText(e.alert.headerText)
-    const textMatch = FERRY_WORD.test(header) || FERRY_WORD.test(nlText(e.alert.descriptionText))
-    if (stopKeys.size === 0 && !textMatch) continue
+    const body = nlText(e.alert.descriptionText)
+    const textMatch = FERRY_WORD.test(header) || FERRY_WORD.test(body)
+    // Netwerkbreed (bijv. landelijke ov-staking, 9 sept 2026: 1070 haltes,
+    // nul veersteigers, geen "pont" in de tekst): telt als algemene melding
+    // die alle lijnen raakt (stops blijft dan leeg = alle lijnen).
+    const networkWide =
+      NETWORK_WORD.test(header) || NETWORK_WORD.test(body) || allStops.size >= NETWORK_STOP_THRESHOLD
+    // Zonder veersteiger-match, veer-woord of netwerkbreed signaal: overslaan.
+    // Bij netwerkbreed blijft stops leeg, en leeg betekent verderop "alle
+    // veerlijnen" voor zowel de banner als de pushmeldingen.
+    if (stopKeys.size === 0 && !textMatch && !networkWide) continue
     if (!header) continue
 
     const periods = e.alert.activePeriod ?? []
