@@ -369,6 +369,7 @@ begin
            address = nullif(trim(p_address), ''), lat = p_lat, lng = p_lng
      where id = p_id
     returning id into nieuw_id;
+    if nieuw_id is null then raise exception 'partner niet gevonden'; end if;
   end if;
   return json_build_object('id', nieuw_id);
 end; $$;
@@ -378,16 +379,26 @@ end; $$;
 create or replace function public.admin_set_partner_pin(p_id uuid, p_pin text)
 returns json language plpgsql volatile security definer
 set search_path = public, extensions as $$
+declare
+  geraakt int;
 begin
   if not public.is_admin() then raise exception 'not authorized'; end if;
+  if p_id is null then raise exception 'geen partner gekozen'; end if;
   if coalesce(p_pin, '') !~ '^[0-9]{4}$' then raise exception 'pincode is vier cijfers'; end if;
   if p_pin in ('0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1234', '4321') then
     raise exception 'kies een minder voor de hand liggende pincode';
   end if;
+
   update public.partners
      set pin_hash = crypt(p_pin, gen_salt('bf')), pin_fails = 0, locked_until = null
    where id = p_id;
-  return json_build_object('ok', true);
+
+  -- Een update zonder treffer is in Postgres geen fout. Zonder deze controle
+  -- meldt de app "gelukt" terwijl er niets gebeurd is.
+  get diagnostics geraakt = row_count;
+  if geraakt = 0 then raise exception 'partner niet gevonden'; end if;
+
+  return json_build_object('ok', true, 'id', p_id);
 end; $$;
 
 create or replace function public.admin_list_deals()

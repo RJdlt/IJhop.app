@@ -37,6 +37,40 @@ interface DealRow {
   redeemed: number
 }
 
+/**
+ * De melding onder het pincodeveld.
+ *
+ * De database geeft leesbare Nederlandse fouten terug ("pincode is vier
+ * cijfers"), maar niet allemaal: PostgREST stuurt bij een ontbrekende functie
+ * of een netwerkstoring iets heel anders. Onbekende meldingen laten we daarom
+ * staan zoals ze zijn, met een zin ervoor, in plaats van ze te vervangen door
+ * een vriendelijk niksje.
+ */
+export function pinUitkomst(fout: string | null | undefined, partner: string, slug: string): {
+  ok: boolean
+  tekst: string
+} {
+  if (!fout) {
+    return { ok: true, tekst: `Pincode gezet. Geef ${partner} de link /partner/${slug} en de code.` }
+  }
+  const bekend: Record<string, string> = {
+    'pincode is vier cijfers': 'Een pincode is precies vier cijfers.',
+    'kies een minder voor de hand liggende pincode':
+      'Te makkelijk te raden. Kies iets anders dan 1234, 4321 of vier dezelfde cijfers.',
+    'partner niet gevonden': 'Deze partner bestaat niet meer. Ververs de pagina.',
+    'geen partner gekozen': 'Deze partner bestaat niet meer. Ververs de pagina.',
+    'not authorized': 'Je bent geen admin (meer). Log opnieuw in.',
+  }
+  const schoon = fout.trim().toLowerCase()
+  for (const [sleutel, tekst] of Object.entries(bekend)) {
+    if (schoon.includes(sleutel)) return { ok: false, tekst }
+  }
+  if (schoon.includes('could not find the function') || schoon.includes('schema cache')) {
+    return { ok: false, tekst: 'De database kent deze functie niet. Draai migratie 0019 en 0021.' }
+  }
+  return { ok: false, tekst: `Opslaan lukte niet: ${fout}` }
+}
+
 /** De steigers waar een lijn aanlegt, zodat "lijnen" bij "steiger" past. */
 export function linesForStop(stopId: string): string[] {
   return LINE_IDS.filter((l) => (LINES[l]?.connects ?? []).includes(stopId))
@@ -59,6 +93,16 @@ export function DealsAdmin() {
   const [melding, setMelding] = useState<string | null>(null)
   const [bezig, setBezig] = useState(false)
   const [nieuwePartner, setNieuwePartner] = useState({ name: '', slug: '', address: '' })
+  // Pincode zetten gebeurt in de rij zelf: welk partner-id staat open, wat is
+  // er ingetypt, en wat kwam eruit. Eerder deed `window.prompt` dit, maar die
+  // geeft null zodra iemand annuleert of de browser dialogen tegenhoudt, en
+  // dan gebeurde er zichtbaar helemaal niets.
+  const [pinVoor, setPinVoor] = useState<string | null>(null)
+  const [pinInvoer, setPinInvoer] = useState('')
+  const [pinBezig, setPinBezig] = useState(false)
+  const [pinUit, setPinUit] = useState<{ id: string; ok: boolean; tekst: string } | null>(null)
+  // Ook het aanmaken van een partner meldde zijn uitkomst in de kaart erboven.
+  const [partnerUit, setPartnerUit] = useState<{ ok: boolean; tekst: string } | null>(null)
 
   const laden = useCallback(async () => {
     if (!supabase) return
@@ -131,32 +175,70 @@ export function DealsAdmin() {
 
   const maakPartner = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!supabase) return
-    const { error } = await supabase.rpc('admin_save_partner', {
-      p_id: null,
-      p_slug: nieuwePartner.slug || nieuwePartner.name,
-      p_name: nieuwePartner.name,
-      p_logo_url: null,
-      p_address: nieuwePartner.address || null,
-      p_lat: null,
-      p_lng: null,
-    })
-    setMelding(error ? error.message : 'Partner aangemaakt.')
-    if (!error) {
-      setNieuwePartner({ name: '', slug: '', address: '' })
-      void laden()
+    if (!supabase) {
+      setPartnerUit({ ok: false, tekst: 'Geen verbinding met de database.' })
+      return
     }
+    setPartnerUit(null)
+    let fout: string | null = null
+    try {
+      const { error } = await supabase.rpc('admin_save_partner', {
+        p_id: null,
+        p_slug: nieuwePartner.slug || nieuwePartner.name,
+        p_name: nieuwePartner.name,
+        p_logo_url: null,
+        p_address: nieuwePartner.address || null,
+        p_lat: null,
+        p_lng: null,
+      })
+      fout = error?.message ?? null
+    } catch (err) {
+      fout = err instanceof Error ? err.message : String(err)
+    }
+    if (fout) {
+      const uit = pinUitkomst(fout, nieuwePartner.name, '')
+      setPartnerUit({ ok: false, tekst: uit.tekst })
+      return
+    }
+    setPartnerUit({ ok: true, tekst: `${nieuwePartner.name} toegevoegd. Zet nu een pincode.` })
+    setNieuwePartner({ name: '', slug: '', address: '' })
+    void laden()
   }
 
-  const zetPin = async (p: PartnerRow) => {
-    if (!supabase) return
-    const pin = window.prompt(`Pincode voor ${p.name} (vier cijfers)`)
-    if (!pin) return
-    const { error } = await supabase.rpc('admin_set_partner_pin', { p_id: p.id, p_pin: pin })
-    setMelding(
-      error ? error.message : `Pincode gezet. Geef ${p.name} de link /partner/${p.slug} en de code.`,
-    )
-    void laden()
+  const openPin = (p: PartnerRow) => {
+    setPinVoor(pinVoor === p.id ? null : p.id)
+    setPinInvoer('')
+    setPinUit(null)
+  }
+
+  const zetPin = async (e: React.FormEvent, p: PartnerRow) => {
+    e.preventDefault()
+    if (pinBezig) return
+    if (!supabase) {
+      setPinUit({ id: p.id, ok: false, tekst: 'Geen verbinding met de database.' })
+      return
+    }
+    setPinBezig(true)
+    setPinUit(null)
+    let fout: string | null = null
+    try {
+      const { error } = await supabase.rpc('admin_set_partner_pin', {
+        p_id: p.id,
+        p_pin: pinInvoer.trim(),
+      })
+      fout = error?.message ?? null
+    } catch (err) {
+      // Netwerk eruit, of de RPC gaf iets terug wat supabase-js niet aankan.
+      fout = err instanceof Error ? err.message : String(err)
+    }
+    const uit = pinUitkomst(fout, p.name, p.slug)
+    setPinUit({ id: p.id, ...uit })
+    setPinBezig(false)
+    if (uit.ok) {
+      setPinInvoer('')
+      setPinVoor(null)
+      void laden()
+    }
   }
 
   const veld = 'w-full rounded-xl border border-slate-200 px-3 py-2 text-sm'
@@ -365,26 +447,85 @@ export function DealsAdmin() {
             Partner toevoegen
           </button>
         </form>
+        {partnerUit && (
+          <p
+            role="status"
+            className={`mb-3 rounded-xl px-3 py-2 text-xs font-medium ${
+              partnerUit.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+            }`}
+          >
+            {partnerUit.ok ? '✓ ' : '✗ '}
+            {partnerUit.tekst}
+          </p>
+        )}
         {partners.length === 0 ? (
           <p className="text-sm text-slate-400">Nog geen partners.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {partners.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-sm">
-                <span className="text-slate-700">
-                  {p.name} <span className="text-slate-400">/partner/{p.slug}</span>
-                </span>
-                <span className="flex items-center gap-3">
-                  {p.locked_until && new Date(p.locked_until) > new Date() && (
-                    <span className="text-xs font-semibold text-rose-600">op slot</span>
-                  )}
-                  <span className={`text-xs ${p.has_pin ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {p.has_pin ? 'pincode ingesteld' : 'nog geen pincode'}
+              <li key={p.id} className="border-t border-slate-100 pt-2 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-slate-700">
+                    {p.name} <span className="text-slate-500">/partner/{p.slug}</span>
                   </span>
-                  <button type="button" onClick={() => zetPin(p)} className="text-xs font-semibold text-slate-600 underline-offset-2 hover:underline">
-                    pincode zetten
-                  </button>
-                </span>
+                  <span className="flex items-center gap-3">
+                    {p.locked_until && new Date(p.locked_until) > new Date() && (
+                      <span className="text-xs font-semibold text-rose-600">op slot</span>
+                    )}
+                    <span className={`text-xs ${p.has_pin ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {p.has_pin ? 'pincode ingesteld' : 'nog geen pincode'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => openPin(p)}
+                      aria-expanded={pinVoor === p.id}
+                      className="text-xs font-semibold text-slate-600 underline-offset-2 hover:underline"
+                    >
+                      {pinVoor === p.id ? 'annuleren' : p.has_pin ? 'pincode wijzigen' : 'pincode zetten'}
+                    </button>
+                  </span>
+                </div>
+
+                {pinVoor === p.id && (
+                  <form onSubmit={(e) => zetPin(e, p)} className="mt-2 flex flex-wrap items-center gap-2">
+                    <label htmlFor={`pin-${p.id}`} className="sr-only">
+                      Pincode voor {p.name}
+                    </label>
+                    <input
+                      id={`pin-${p.id}`}
+                      inputMode="numeric"
+                      autoComplete="off"
+                      autoFocus
+                      placeholder="1234"
+                      value={pinInvoer}
+                      onChange={(e) => setPinInvoer(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                      className="w-28 rounded-xl border border-slate-200 px-3 py-2 text-center font-mono text-lg tracking-[0.3em] text-slate-900"
+                    />
+                    <button
+                      type="submit"
+                      disabled={pinBezig}
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {pinBezig ? 'Bezig…' : 'Bewaren'}
+                    </button>
+                    <span className="text-xs text-slate-500">Vier cijfers. Niet 1234 of vier dezelfde.</span>
+                  </form>
+                )}
+
+                {/* De uitkomst staat onder het veld waar hij bij hoort. Stond
+                    eerder bovenin de eerste kaart, twee kaarten hoger, dus in
+                    de praktijk buiten beeld. */}
+                {pinUit?.id === p.id && (
+                  <p
+                    role="status"
+                    className={`mt-2 rounded-xl px-3 py-2 text-xs font-medium ${
+                      pinUit.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+                    }`}
+                  >
+                    {pinUit.ok ? '✓ ' : '✗ '}
+                    {pinUit.tekst}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
