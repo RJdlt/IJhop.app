@@ -93,13 +93,21 @@ export interface DealMeasureRow {
   redeemed: number
 }
 export interface DealStopRow { value: string | null; seen: number; claimed: number; redeemed: number }
+/** Uitsplitsing van de trechter naar kaartvorm of naar wel/geen foto. */
+export interface DealSplitRow { value: string; seen: number; claimed: number }
 export interface DealReturn {
   with_deal: number
   with_deal_returned: number
   without_deal: number
   without_deal_returned: number
 }
-export interface DealsBlock { rows: DealMeasureRow[]; by_stop: DealStopRow[]; return: DealReturn }
+export interface DealsBlock {
+  rows: DealMeasureRow[]
+  by_stop: DealStopRow[]
+  by_mode?: DealSplitRow[]
+  by_photo?: DealSplitRow[]
+  return: DealReturn
+}
 /** Eén appversie in het venster. `first_seen` bepaalt welke de nieuwste is. */
 export interface VersionRow {
   version: string
@@ -155,6 +163,12 @@ const VARIANT_LABEL: Record<string, string> = {
 }
 /** Steigernaam voor het dashboard; onbekende of ontbrekende ids blijven leesbaar. */
 const STOP_LABEL = (id: string | null) => (id ? (STOPS[id]?.name ?? id) : UNKNOWN_LABEL)
+/** Leesbare naam per kaartvorm in het dashboard. */
+const MODE_LABEL: Record<string, string> = {
+  compact: 'compact (spits en nacht)',
+  normaal: 'normaal (overdag)',
+  vol: 'vol, met foto (avond)',
+}
 const nf = (n: number) => (Number.isFinite(n) ? n : 0).toLocaleString('nl-NL')
 
 function fmtDuration(sec: number): string {
@@ -249,6 +263,39 @@ function Gate({ n, min, unit, children }: { n: number; min: number; unit: string
   }
   return <>{children}</>
 }
+/** Klein lijstje met claim-percentages, gebruikt voor kaartvorm en foto. */
+function SplitLijst({
+  titel,
+  rijen,
+  naam,
+}: {
+  titel: string
+  rijen: DealSplitRow[]
+  naam: (v: string) => string
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{titel}</p>
+      <div className="flex flex-col gap-1">
+        {rijen.map((r) => {
+          const pct = claimRate(r)
+          return (
+            <div key={r.value} className="flex items-center gap-2 text-xs">
+              <span className="w-40 shrink-0 truncate text-slate-600">{naam(r.value)}</span>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-brand" style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
+              </div>
+              <span className="w-24 shrink-0 text-right tabular-nums text-slate-600">
+                {pct == null ? `n=${nf(r.seen)}` : `${pct}% · n=${nf(r.seen)}`}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function BarList({ rows, color = 'bg-brand' }: { rows: Bar[]; color?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.value))
   if (rows.length === 0) return <Empty />
@@ -462,6 +509,15 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
           seen: 210, claimed: 64, shown: 58, codes: 64, redeemed: 31 },
       ],
       by_stop: [{ value: 'ndsm', seen: 210, claimed: 64, redeemed: 31 }],
+      by_mode: [
+        { value: 'compact', seen: 120, claimed: 22 },
+        { value: 'normaal', seen: 60, claimed: 19 },
+        { value: 'vol', seen: 30, claimed: 23 },
+      ],
+      by_photo: [
+        { value: 'true', seen: 30, claimed: 23 },
+        { value: 'false', seen: 180, claimed: 41 },
+      ],
       return: { with_deal: 64, with_deal_returned: 29, without_deal: 240, without_deal_returned: 62 },
     },
     hourly, dow,
@@ -585,6 +641,18 @@ export function cohortCells(row: CohortRow, weeks = 4): (CohortCell | null)[] {
     if (v == null || !Number.isFinite(v)) return null
     return { users: v, pct: row.size > 0 ? Math.round((v / row.size) * 100) : 0 }
   })
+}
+
+/**
+ * Hoeveel procent van wie de kaart zag hem ook pakte, per uitsplitsing.
+ *
+ * De noemer is `seen`: wie de kaart nooit zag kun je niets verwijten. Onder
+ * de twintig vertoningen laten we het percentage weg, want dan zegt een
+ * verschil van vijf procentpunt niets.
+ */
+export function claimRate(r: DealSplitRow, min = 20): number | null {
+  if (r.seen < min || r.seen === 0) return null
+  return Math.round((r.claimed / r.seen) * 100)
 }
 
 /** Aandeel van wie de uitnodiging zag en ook installeerde. */
@@ -1283,6 +1351,21 @@ export function Admin() {
                     </div>
                   ))}
 
+                  {(dealBlok.by_mode?.length ?? 0) > 0 && (
+                    <SplitLijst
+                      titel="Per kaartvorm"
+                      rijen={dealBlok.by_mode ?? []}
+                      naam={(v) => MODE_LABEL[v] ?? v}
+                    />
+                  )}
+                  {(dealBlok.by_photo?.length ?? 0) > 0 && (
+                    <SplitLijst
+                      titel="Met en zonder foto"
+                      rijen={dealBlok.by_photo ?? []}
+                      naam={(v) => (v === 'true' ? 'met foto' : 'zonder foto')}
+                    />
+                  )}
+
                   {dealBlok.by_stop.length > 1 && (
                     <div>
                       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -1412,12 +1495,16 @@ export function Admin() {
                 <BarList rows={dash.devices.map((r) => ({ label: deviceLabel(r.value), value: r.users }))} color="bg-violet-500" />
               </Gate>
             </Panel>
-            <Panel title="Populairste pontlijn" emoji="🚤" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
+            {/* De pont-kiezer is van het klokscherm verdwenen, dus er komen
+                geen nieuwe ferry_pick-events meer bij. Deze twee panelen
+                blijven staan voor wat er al gemeten is; ze lopen niet verder
+                op en dat hoort erbij te staan. */}
+            <Panel title="Populairste pontlijn" emoji="🚤" sub="historisch · pont-kiezer is weg">
               <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
                 <BarList rows={lineUsage} />
               </Gate>
             </Panel>
-            <Panel title="Gekozen route (unieke gebruikers)" emoji="⛴️" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
+            <Panel title="Gekozen route (unieke gebruikers)" emoji="⛴️" sub="historisch · pont-kiezer is weg">
               <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
                 <BarList rows={dash.ferries.map((r) => ({ label: ferryRouteLabel(r.value), value: r.users, title: `${nf(r.events)} keer gekozen` }))} color="bg-brand" />
               </Gate>

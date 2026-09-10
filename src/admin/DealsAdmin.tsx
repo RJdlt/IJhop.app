@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { LINES, LINE_IDS, STOPS } from '../lib/schedule'
 import { dealWeekWindow, mondayOf } from '../lib/time'
+import { validateOffer } from '../lib/dealCard'
+import { uploadMedia } from '../lib/media'
+import { DemoKaart } from './DemoKaart'
 
 /**
  * Pontdeals beheren: partners aanmaken, ze een pincode geven, en per week één
@@ -16,6 +19,7 @@ interface PartnerRow {
   slug: string
   name: string
   logo_url: string | null
+  photo_url: string | null
   address: string | null
   has_pin: boolean
   locked_until: string | null
@@ -37,6 +41,9 @@ interface DealRow {
   redeemed: number
   /** Testcodes uit de preview; die tellen nergens anders mee. */
   preview_codes?: number
+  photo_url: string | null
+  partner_photo_url: string | null
+  partner_logo_url: string | null
 }
 
 /** De app-URL die deze deal toont alsof het maandag is. Wie hem opent zonder
@@ -92,6 +99,7 @@ const leeg = {
   walk_min: '',
   monday: '',
   status: 'concept',
+  photo_url: '',
 }
 
 export function DealsAdmin() {
@@ -111,6 +119,11 @@ export function DealsAdmin() {
   const [pinUit, setPinUit] = useState<{ id: string; ok: boolean; tekst: string } | null>(null)
   // Ook het aanmaken van een partner meldde zijn uitkomst in de kaart erboven.
   const [partnerUit, setPartnerUit] = useState<{ ok: boolean; tekst: string } | null>(null)
+  // Uploads per partner: welke rij is bezig, en wat kwam eruit.
+  const [mediaBezig, setMediaBezig] = useState<string | null>(null)
+  const [mediaUit, setMediaUit] = useState<{ id: string; ok: boolean; tekst: string } | null>(null)
+  const [demoVoor, setDemoVoor] = useState<PartnerRow | null>(null)
+  const [dealFotoBezig, setDealFotoBezig] = useState(false)
 
   const laden = useCallback(async () => {
     if (!supabase) return
@@ -134,6 +147,15 @@ export function DealsAdmin() {
       setMelding('Die maandag kan ik niet omrekenen.')
       return
     }
+    const aanbod = validateOffer(form.offer)
+    if (!aanbod.ok) {
+      setMelding(aanbod.reason ?? 'Dit aanbod kan zo niet.')
+      return
+    }
+    if (form.walk_min === '' || Number(form.walk_min) < 1) {
+      setMelding('Vul de looptijd vanaf de steiger in; zonder die minuten zegt de kaart niets.')
+      return
+    }
     setBezig(true)
     const { error } = await supabase.rpc('admin_save_deal', {
       p_id: form.id,
@@ -141,10 +163,11 @@ export function DealsAdmin() {
       p_offer: form.offer,
       p_stop: form.stop_id,
       p_lines: linesForStop(form.stop_id),
-      p_walk_min: form.walk_min === '' ? null : Number(form.walk_min),
+      p_walk_min: Number(form.walk_min),
       p_valid_from: venster.from,
       p_valid_to: venster.to,
       p_status: form.status,
+      p_photo_url: form.photo_url || null,
     })
     setBezig(false)
     setMelding(error ? error.message : form.id ? 'Deal bijgewerkt.' : 'Deal aangemaakt.')
@@ -163,6 +186,7 @@ export function DealsAdmin() {
       walk_min: d.walk_min == null ? '' : String(d.walk_min),
       monday: mondayOf(new Date(d.valid_from)),
       status: d.status,
+      photo_url: d.photo_url ?? '',
     })
 
   const zetStatus = async (d: DealRow, status: string) => {
@@ -177,6 +201,7 @@ export function DealsAdmin() {
       p_valid_from: d.valid_from,
       p_valid_to: d.valid_to,
       p_status: status,
+      p_photo_url: d.photo_url,
     })
     void laden()
   }
@@ -211,6 +236,46 @@ export function DealsAdmin() {
     setPartnerUit({ ok: true, tekst: `${nieuwePartner.name} toegevoegd. Zet nu een pincode.` })
     setNieuwePartner({ name: '', slug: '', address: '' })
     void laden()
+  }
+
+  /** Verkleint, uploadt en bewaart het nieuwe plaatje bij de partner. */
+  const zetMedia = async (p: PartnerRow, soort: 'logo' | 'foto', file: File) => {
+    if (!supabase) return
+    setMediaBezig(`${p.id}:${soort}`)
+    setMediaUit(null)
+    const res = await uploadMedia(file, soort, p.slug)
+    if (!res.ok) {
+      setMediaUit({ id: p.id, ok: false, tekst: res.reason })
+      setMediaBezig(null)
+      return
+    }
+    const { error } = await supabase.rpc('admin_set_partner_media', {
+      p_id: p.id,
+      p_logo_url: soort === 'logo' ? res.url : p.logo_url,
+      p_photo_url: soort === 'foto' ? res.url : p.photo_url,
+    })
+    setMediaBezig(null)
+    setMediaUit({
+      id: p.id,
+      ok: !error,
+      tekst: error ? `Opslaan lukte niet: ${error.message}` : `${soort === 'logo' ? 'Logo' : 'Foto'} staat erop.`,
+    })
+    if (!error) void laden()
+  }
+
+  const wisMedia = async (p: PartnerRow, soort: 'logo' | 'foto') => {
+    if (!supabase) return
+    const { error } = await supabase.rpc('admin_set_partner_media', {
+      p_id: p.id,
+      p_logo_url: soort === 'logo' ? null : p.logo_url,
+      p_photo_url: soort === 'foto' ? null : p.photo_url,
+    })
+    setMediaUit({
+      id: p.id,
+      ok: !error,
+      tekst: error ? error.message : `${soort === 'logo' ? 'Logo' : 'Foto'} weggehaald.`,
+    })
+    if (!error) void laden()
   }
 
   const openPin = (p: PartnerRow) => {
@@ -292,21 +357,31 @@ export function DealsAdmin() {
           </div>
 
           <label className="text-xs font-semibold text-slate-500">
-            Aanbod (maximaal zes woorden)
+            Aanbod
             <input
               required
               value={form.offer}
               onChange={(e) => setForm({ ...form, offer: e.target.value })}
-              placeholder="Pizza margherita 9 euro in plaats van 14"
+              placeholder="Twee pizza's voor 21 euro"
               className={veld}
             />
+            <span className="mt-1 block font-normal text-[11px] text-slate-500">
+              Formuleer als eindprijs, bijvoorbeeld "Twee pizza's voor 21 euro". Hooguit zes
+              woorden, geen percentages en geen woorden als korting of gratis.
+            </span>
           </label>
+          {form.offer.trim() !== '' && !validateOffer(form.offer).ok && (
+            <p className="rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">
+              {validateOffer(form.offer).reason}
+            </p>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-xs font-semibold text-slate-500">
-              Looptijd vanaf de steiger (min)
+              Looptijd vanaf de steiger (min) *
               <input
                 type="number"
+                required
                 min={1}
                 max={30}
                 value={form.walk_min}
@@ -336,6 +411,48 @@ export function DealsAdmin() {
                 <option value="gestopt">gestopt</option>
               </select>
             </label>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-semibold text-slate-500">Eigen foto voor deze deal</span>
+            {form.photo_url ? (
+              <>
+                <img src={form.photo_url} alt="Gekozen dealfoto" className="h-10 w-16 rounded-lg object-cover ring-1 ring-slate-200" />
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, photo_url: '' })}
+                  className="min-h-[44px] text-xs text-slate-500 underline-offset-2 hover:underline"
+                >
+                  weghalen (dan die van de partner)
+                </button>
+              </>
+            ) : (
+              <span className="text-[11px] text-slate-500">geen; de kaart gebruikt die van de partner</span>
+            )}
+            <label htmlFor="deal-foto" className="min-h-[44px] cursor-pointer py-2.5 text-xs font-semibold text-slate-600 underline-offset-2 hover:underline">
+              {dealFotoBezig ? 'Bezig…' : 'Foto kiezen'}
+            </label>
+            <input
+              id="deal-foto"
+              type="file"
+              accept="image/jpeg,image/webp,image/png"
+              className="sr-only"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (!f) return
+                const partner = partners.find((p) => p.id === form.partner_id)
+                if (!partner) {
+                  setMelding('Kies eerst een partner; de foto komt in zijn map te staan.')
+                  return
+                }
+                setDealFotoBezig(true)
+                const res = await uploadMedia(f, 'foto', partner.slug)
+                setDealFotoBezig(false)
+                if (res.ok) setForm((v) => ({ ...v, photo_url: res.url }))
+                else setMelding(res.reason)
+              }}
+            />
           </div>
 
           <p className="text-[11px] text-slate-400">
@@ -496,14 +613,52 @@ export function DealsAdmin() {
                     </span>
                     <button
                       type="button"
+                      onClick={() => setDemoVoor(p)}
+                      className="min-h-[44px] text-xs font-semibold text-slate-600 underline-offset-2 hover:underline"
+                    >
+                      demo-kaart
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => openPin(p)}
                       aria-expanded={pinVoor === p.id}
-                      className="text-xs font-semibold text-slate-600 underline-offset-2 hover:underline"
+                      className="min-h-[44px] text-xs font-semibold text-slate-600 underline-offset-2 hover:underline"
                     >
                       {pinVoor === p.id ? 'annuleren' : p.has_pin ? 'pincode wijzigen' : 'pincode zetten'}
                     </button>
                   </span>
                 </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <MediaVak
+                    partner={p}
+                    soort="logo"
+                    url={p.logo_url}
+                    bezig={mediaBezig === `${p.id}:logo`}
+                    onKies={(f) => zetMedia(p, 'logo', f)}
+                    onWis={() => wisMedia(p, 'logo')}
+                  />
+                  <MediaVak
+                    partner={p}
+                    soort="foto"
+                    url={p.photo_url}
+                    bezig={mediaBezig === `${p.id}:foto`}
+                    onKies={(f) => zetMedia(p, 'foto', f)}
+                    onWis={() => wisMedia(p, 'foto')}
+                  />
+                </div>
+
+                {mediaUit?.id === p.id && (
+                  <p
+                    role="status"
+                    className={`mt-2 rounded-xl px-3 py-2 text-xs font-medium ${
+                      mediaUit.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+                    }`}
+                  >
+                    {mediaUit.ok ? '✓ ' : '✗ '}
+                    {mediaUit.tekst}
+                  </p>
+                )}
 
                 {pinVoor === p.id && (
                   <form onSubmit={(e) => zetPin(e, p)} className="mt-2 flex flex-wrap items-center gap-2">
@@ -550,6 +705,73 @@ export function DealsAdmin() {
           </ul>
         )}
       </Kaart>
+
+      {demoVoor && <DemoKaart partner={demoVoor} onSluit={() => setDemoVoor(null)} />}
+    </div>
+  )
+}
+
+/**
+ * Eén uploadvak. Toont wat er staat, en anders een knop om te kiezen. Het
+ * verkleinen gebeurt in `uploadMedia`, hier gaat alleen het bestand heen.
+ */
+function MediaVak({
+  partner,
+  soort,
+  url,
+  bezig,
+  onKies,
+  onWis,
+}: {
+  partner: PartnerRow
+  soort: 'logo' | 'foto'
+  url: string | null
+  bezig: boolean
+  onKies: (f: File) => void
+  onWis: () => void
+}) {
+  const id = `media-${partner.id}-${soort}`
+  const label = soort === 'logo' ? 'Logo (vierkant)' : 'Dealfoto (liggend)'
+  return (
+    <div className="flex items-center gap-2">
+      {url ? (
+        <img
+          src={url}
+          alt={`${label} van ${partner.name}`}
+          className={`${soort === 'logo' ? 'h-10 w-10 rounded-xl object-contain' : 'h-10 w-16 rounded-lg object-cover'} bg-white ring-1 ring-slate-200`}
+        />
+      ) : (
+        <span
+          aria-hidden="true"
+          className={`${soort === 'logo' ? 'h-10 w-10' : 'h-10 w-16'} grid place-items-center rounded-xl bg-slate-100 text-[10px] text-slate-500`}
+        >
+          leeg
+        </span>
+      )}
+      <div className="flex flex-col">
+        <label
+          htmlFor={id}
+          className="min-h-[44px] cursor-pointer py-2.5 text-xs font-semibold text-slate-600 underline-offset-2 hover:underline"
+        >
+          {bezig ? 'Bezig…' : url ? `${label} vervangen` : `${label} kiezen`}
+        </label>
+        <input
+          id={id}
+          type="file"
+          accept={soort === 'logo' ? 'image/png,image/svg+xml,image/jpeg,image/webp' : 'image/jpeg,image/webp,image/png'}
+          className="sr-only"
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) onKies(f)
+            e.target.value = ''
+          }}
+        />
+        {url && (
+          <button type="button" onClick={onWis} className="text-left text-[11px] text-slate-400 hover:underline">
+            weghalen
+          </button>
+        )}
+      </div>
     </div>
   )
 }

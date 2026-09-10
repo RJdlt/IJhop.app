@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  claimRate,
   cohortCells,
   dealFunnel,
   returnLift,
@@ -467,5 +468,21 @@ describe('versionSplit', () => {
     const r = versionSplit([kapot, rij('nieuw', 10, 1)])
     expect(r.current).toBe('nieuw')
     expect(r.oldUsers).toBe(5)
+  })
+})
+
+describe('claimRate', () => {
+  it('zet claims af tegen wie de kaart zag', () => {
+    expect(claimRate({ value: 'vol', seen: 200, claimed: 50 })).toBe(25)
+  })
+
+  it('zwijgt onder de twintig vertoningen', () => {
+    // Bij kleine aantallen is een verschil van vijf procentpunt ruis.
+    expect(claimRate({ value: 'vol', seen: 19, claimed: 10 })).toBeNull()
+    expect(claimRate({ value: 'vol', seen: 20, claimed: 10 })).toBe(50)
+  })
+
+  it('deelt niet door nul', () => {
+    expect(claimRate({ value: 'vol', seen: 0, claimed: 0 })).toBeNull()
   })
 })

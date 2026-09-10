@@ -22,13 +22,23 @@ function initialLang(): Lang {
   return navigator.language?.toLowerCase().startsWith('en') ? 'en' : 'nl'
 }
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = useState<Lang>(initialLang)
+/**
+ * `lang` legt de taal vast in plaats van hem uit de browser te halen. Alleen
+ * gebruikt door de demo-kaart in het dashboard: dat is een verkoopmiddel voor
+ * een Amsterdamse zaak en hoort Nederlands te zijn, ook als de laptop van de
+ * verkoper op Engels staat.
+ */
+export function I18nProvider({ children, lang: vast }: { children: ReactNode; lang?: Lang }) {
+  const [gekozen, setLang] = useState<Lang>(initialLang)
+  const lang = vast ?? gekozen
 
   useEffect(() => {
+    // Een vastgezette taal is voor één component; die hoort de voorkeur van
+    // de bezoeker niet te overschrijven.
+    if (vast) return
     window.localStorage.setItem(STORAGE_KEY, lang)
     document.documentElement.lang = lang
-  }, [lang])
+  }, [lang, vast])
 
   const value = useMemo<I18nValue>(
     () => ({

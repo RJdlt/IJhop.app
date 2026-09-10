@@ -32,6 +32,9 @@ export interface Deal {
   walk_min: number | null
   valid_from: string
   valid_to: string
+  /** Eigen foto van de deal, of anders die van de partner. Null als er geen
+   *  is: dan toont de kaart alleen het logo en geen leeg vlak. */
+  photo_url: string | null
   partner: DealPartner
 }
 

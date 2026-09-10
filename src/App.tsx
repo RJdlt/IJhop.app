@@ -8,21 +8,21 @@ import { SponsorCard } from './components/SponsorCard'
 import { OnboardingFavorites } from './components/OnboardingFavorites'
 import { DisruptionBanner } from './components/DisruptionBanner'
 import { PrizeEntry } from './components/PrizeEntry'
-import { FerryPicker } from './components/FerryPicker'
 import { DealCard } from './components/DealCard'
+import { DealStrip } from './components/DealStrip'
 import { DealRedeem } from './components/DealRedeem'
 import { TipFriend } from './components/TipFriend'
-import type { FerryOption } from './components/FerryPicker'
 import { useNow } from './hooks/useNow'
 import { useAnonSession } from './hooks/useAnonSession'
 import { setupPwaAutoUpdate } from './pwa'
 import { startAnalytics, track } from './lib/analytics'
 import { useI18n } from './i18n/i18n'
 import { amsterdamMoment } from './lib/time'
-import { CONNECTIONS, LINES, LINE_IDS, nextDepartures, timetable } from './lib/schedule'
+import { LINES, LINE_IDS, timetable } from './lib/schedule'
 import { NotificationOptIn } from './components/NotificationOptIn'
 import { bumpVisits, shouldOfferPrize, markPrizeSeen } from './lib/prize'
 import { useDeal } from './hooks/useDeal'
+import { dealCardMode, modeShowsPhoto } from './lib/dealCard'
 import type { StopPair } from './lib/schedule'
 import type { LineId } from './types'
 
@@ -40,9 +40,6 @@ const DIRECTIONS: Record<LineId, [StopPair, StopPair]> = Object.fromEntries(
 
 const FAV_KEY = 'ijhop:favlines'
 const FLIP_KEY = 'ijhop:flipped'
-const WATCH_KEY = 'ijhop:watch'
-
-const connKey = (c: StopPair) => `${c.line}:${c.from}:${c.to}`
 
 export default function App() {
   const { t } = useI18n()
@@ -143,52 +140,34 @@ export default function App() {
     }
   }
 
-  // Op welke afvaart je wacht. Bepaalt met wie je elkaar kunt vinden op de pont.
-  const [watchKey, setWatchKey] = useState<string | null>(
-    () => (typeof window === 'undefined' ? null : window.localStorage.getItem(WATCH_KEY)),
-  )
-  const chooseWatch = (key: string | null) => {
-    setWatchKey(key)
-    track('ferry_pick', { key })
-    try {
-      if (key) window.localStorage.setItem(WATCH_KEY, key)
-      else window.localStorage.removeItem(WATCH_KEY)
-    } catch {
-      /* faal stil */
+  // Welke steigers tellen voor de Pontdeal?
+  //
+  // Sinds de pont-kiezer weg is bepalen je favorieten dat, en richting telt
+  // mee. De lijnen op je scherm staan in een richting: waar je vertrekt en
+  // waar je aankomt. Een deal bij de aankomstkant is er eentje waar je zo
+  // staat; een deal bij de vertrekkant is er eentje om de hoek. Allebei
+  // bruikbaar, maar de kaart moet het verschil zeggen, dus we houden de twee
+  // lijstjes apart.
+  //
+  // Zonder favorieten pakken we de eerst getoonde lijn: dat is wat de
+  // bezoeker bovenaan ziet staan.
+  const { departStops, arriveStops } = useMemo(() => {
+    const zichtbaar = favLines.length > 0 ? favLines : LINE_IDS.slice(0, 1)
+    const vertrek = new Set<string>()
+    const aankomst = new Set<string>()
+    for (const line of zichtbaar) {
+      const richting = DIRECTIONS[line]?.[flipped[line] ? 1 : 0]
+      if (!richting) continue
+      vertrek.add(richting.from)
+      aankomst.add(richting.to)
     }
-  }
+    return { departStops: [...vertrek], arriveStops: [...aankomst] }
+  }, [favLines, flipped])
 
-  // Live aftelklok per richting, voor de pont-keuze. Heb je favorieten, dan
-  // tonen we alleen die richtingen: anders staat er een lijst van twintig
-  // knoppen onder je klok en dat leest niet meer.
-  const ferryOptions = useMemo<FerryOption[]>(
-    () =>
-      CONNECTIONS.filter((c) => favLines.length === 0 || favs.has(c.line)).map((c) => ({
-        key: connKey(c),
-        line: c.line,
-        from: c.from,
-        to: c.to,
-        secondsUntil: nextDepartures({ from: c.from, to: c.to, nowSecondOfWeek, limit: 1 })[0]
-          ?.secondsUntil,
-      })),
-    [nowSecondOfWeek, favs, favLines.length],
+  const dealStops = useMemo(
+    () => [...new Set([...arriveStops, ...departStops])],
+    [arriveStops, departStops],
   )
-
-  const watched = watchKey ? ferryOptions.find((o) => o.key === watchKey) ?? null : null
-
-  // Pontdeals: welke steigers zijn voor deze bezoeker relevant? De pont waar
-  // hij op wacht telt het zwaarst, daarna zijn favoriete lijnen. Zonder dat
-  // alles krijgt hij niets te zien in plaats van de deal van een steiger waar
-  // hij nooit komt.
-  const dealStops = useMemo(() => {
-    const stops = new Set<string>()
-    if (watched) {
-      stops.add(watched.from)
-      stops.add(watched.to)
-    }
-    for (const line of favLines) for (const stop of LINES[line]?.connects ?? []) stops.add(stop)
-    return [...stops]
-  }, [watched, favLines])
 
   const {
     deal,
@@ -201,7 +180,14 @@ export default function App() {
   const [redeemOpen, setRedeemOpen] = useState(false)
   const grabDeal = async () => {
     if (!deal) return
-    if (!dealPreview) track('deal_claim', { deal_id: deal.id, had_code: dealCode != null })
+    if (!dealPreview) {
+      track('deal_claim', {
+        deal_id: deal.id,
+        had_code: dealCode != null,
+        card_mode: dealCardMode(),
+        has_photo: modeShowsPhoto(dealCardMode()) && !!deal.photo_url,
+      })
+    }
     const res = dealCode ?? (await claim())
     if (res) setRedeemOpen(true)
   }
@@ -259,18 +245,24 @@ export default function App() {
           <InstallPrompt />
 
           {/* De deal staat onder de klok, nooit erboven: hij is een beloning
-              voor wie toch al wacht. */}
-          <DealCard
-            deal={deal}
-            next={nextDeal}
-            redeemedWeek={redeemedWeek}
-            hasCode={dealCode != null}
-            onGrab={grabDeal}
-            preview={dealPreview}
-          />
+              voor wie toch al wacht. Heb je hem gepakt, dan neemt de strook
+              zijn plaats in; dan is de kaart zelf niet meer nodig. */}
+          {dealCode ? (
+            <DealStrip deal={deal} code={dealCode} onOpen={() => setRedeemOpen(true)} />
+          ) : (
+            <DealCard
+              deal={deal}
+              next={nextDeal}
+              redeemedWeek={redeemedWeek}
+              hasCode={false}
+              onGrab={grabDeal}
+              departStops={departStops}
+              arriveStops={arriveStops}
+              preview={dealPreview}
+            />
+          )}
           <TipFriend redeemedAt={dealCode?.redeemed_at ?? null} />
 
-          <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
           <CatchPanel nowSecondOfWeek={nowSecondOfWeek} />
           <NotificationOptIn favLines={favLines} />
           {offerPrize && <PrizeEntry />}

@@ -80,6 +80,7 @@ export interface Strings {
     badge: string
     teaser: string
     grab: string
+    yourDeal: string
     walkFrom: string
     yourCode: string
     savedInApp: string
@@ -184,7 +185,8 @@ export const STRINGS: Record<Lang, Strings> = {
     deals: {
       badge: 'Pontdeal',
       teaser: 'Volgende Pontdeal: maandag',
-      grab: 'Pak je deal',
+      grab: 'Pak je Pontdeal',
+      yourDeal: 'Jouw Pontdeal',
       walkFrom: 'min van',
       yourCode: 'Jouw code',
       savedInApp: 'bewaard in de app',
@@ -193,7 +195,7 @@ export const STRINGS: Record<Lang, Strings> = {
       howTo: 'Zo werkt het: laat dit scherm zien bij de kassa.',
       redeemed: 'Ingewisseld',
       redeemedNote: 'Fijne dag verder.',
-      redeemedThisWeek: 'keer ingewisseld deze week',
+      redeemedThisWeek: 'Deze week al {n} keer verzilverd',
       close: 'Terug naar de klok',
       tipFriend: 'Tip een vriend',
       tipShare: 'Elke week een deal voor wie op de pont wacht.',
@@ -287,7 +289,8 @@ export const STRINGS: Record<Lang, Strings> = {
     deals: {
       badge: 'Ferry deal',
       teaser: 'Next ferry deal: Monday',
-      grab: 'Get your deal',
+      grab: 'Get your Pontdeal',
+      yourDeal: 'Your Pontdeal',
       walkFrom: 'min from',
       yourCode: 'Your code',
       savedInApp: 'saved in the app',
@@ -296,7 +299,7 @@ export const STRINGS: Record<Lang, Strings> = {
       howTo: 'How it works: show this screen at the counter.',
       redeemed: 'Redeemed',
       redeemedNote: 'Enjoy your day.',
-      redeemedThisWeek: 'redeemed this week',
+      redeemedThisWeek: 'Redeemed {n} times this week',
       close: 'Back to the clock',
       tipFriend: 'Tell a friend',
       tipShare: 'A deal every week for anyone waiting for the ferry.',
