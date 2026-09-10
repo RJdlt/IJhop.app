@@ -52,8 +52,12 @@ export default function App() {
   const { userId } = useAnonSession()
 
   // Nieuwe versie beschikbaar? Toon een verversen-knop i.p.v. vanzelf herladen.
-  const [updateReady, setUpdateReady] = useState(false)
-  useEffect(() => setupPwaAutoUpdate(() => setUpdateReady(true)), [])
+  // Nieuwe versie beschikbaar? Toon een balkje. We herladen nooit uit
+  // onszelf: `applyUpdate` draait pas als de bezoeker erop tikt.
+  const [applyUpdate, setApplyUpdate] = useState<(() => void) | null>(null)
+  useEffect(() => {
+    setupPwaAutoUpdate((apply) => setApplyUpdate(() => apply))
+  }, [])
 
   // Offline-indicator: de klok werkt gewoon door (dienstregeling zit in de app),
   // maar we zeggen eerlijk dat live storingsinfo nu niet ververst.
@@ -291,16 +295,26 @@ export default function App() {
         <OnboardingFavorites favs={favs} onToggle={toggleFav} onDone={finishOnboarding} />
       )}
 
-      {/* Niet-storende update-melding: één tik en je zit op de nieuwste versie. */}
-      {updateReady && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-xl ring-1 ring-black/10"
-          >
-            ⟳ {t.updateAvailable} · {t.refreshNow}
-          </button>
+      {/* Klein balkje onderaan, niet in de weg van de klok. Eén tik zet de
+          nieuwe versie aan en herlaadt; tot die tik gebeurt er niets. */}
+      {applyUpdate && (
+        <div
+          role="status"
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-black/5 bg-white/95 px-4 py-2.5 backdrop-blur dark:border-white/10 dark:bg-slate-900/95"
+          style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))' }}
+        >
+          <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              {t.updateAvailable}
+            </span>
+            <button
+              type="button"
+              onClick={applyUpdate}
+              className="shrink-0 rounded-full bg-brand-deep px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-brand-dark"
+            >
+              {t.refreshNow}
+            </button>
+          </div>
         </div>
       )}
     </div>

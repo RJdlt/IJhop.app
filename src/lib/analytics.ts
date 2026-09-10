@@ -15,6 +15,15 @@ export { randomId }
 
 const SESSION_KEY = 'ijhop:analytics:session'
 
+/**
+ * De versie die dit toestel draait, als commit-hash van zeven tekens.
+ *
+ * Gaat mee in elk event, niet alleen bij het starten. Een PWA die op een oude
+ * build blijft hangen verraadt zich dan bij elke hartslag, en niet pas als
+ * iemand de app opnieuw opent; juist die toestellen openen hem zelden opnieuw.
+ */
+export const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'onbekend'
+
 /** Heartbeat-cadans en -plafond; samen bepalen ze tot hoever we sessieduur
  *  kunnen meten (30s × 20 = 10 minuten) en hoeveel events dat maximaal kost. */
 export const HEARTBEAT_MS = 30_000
@@ -58,7 +67,7 @@ export async function track(name: string, props?: Record<string, unknown>): Prom
       user_id: userId,
       session_id: sessionId(),
       name,
-      props: props ?? null,
+      props: { ...(props ?? {}), app_version: APP_VERSION },
       path: typeof location !== 'undefined' ? location.pathname + location.hash : null,
     })
   } catch {

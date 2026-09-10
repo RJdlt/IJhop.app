@@ -4,5 +4,21 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "cleanUrls": true,
+  "headers": [
+    {
+      "comment": "De schil, de service worker en het manifest mogen nooit blijven hangen: dit zijn de bestanden waarlangs een nieuwe versie binnenkomt. must-revalidate betekent dat de browser bij elk gebruik navraag doet, dus in de praktijk nul seconden cache. De bovengrens van 24 uur uit de opdracht wordt hiermee ruim gehaald.",
+      "source": "/(index.html)?",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+    },
+    {
+      "source": "/(sw.js|registerSW.js|push-sw.js|manifest.json)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+    },
+    {
+      "comment": "Deze dragen een inhoudshash in hun naam, dus een gewijzigd bestand krijgt een andere URL. Die mogen dus wel lang blijven staan.",
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    }
+  ],
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

@@ -3,6 +3,7 @@ import {
   cohortCells,
   dealFunnel,
   returnLift,
+  versionSplit,
   cohortShade,
   installRate,
   parseFerryKey,
@@ -420,5 +421,51 @@ describe('returnLift', () => {
 
   it('valt niet om zonder data', () => {
     expect(returnLift(undefined)).toEqual({ met: 0, zonder: 0, lift: null })
+  })
+})
+
+describe('versionSplit', () => {
+  const rij = (version: string, users: number, dagenGeleden: number) => ({
+    version,
+    users,
+    sessions: users,
+    first_seen: new Date(Date.parse('2026-09-10T12:00:00Z') - dagenGeleden * 86_400_000).toISOString(),
+    last_seen: '2026-09-10T12:00:00Z',
+  })
+
+  it('kiest de versie met de recentste eerste melding als de huidige', () => {
+    const r = versionSplit([rij('oud', 30, 20), rij('nieuw', 70, 1), rij('midden', 10, 8)])
+    expect(r.current).toBe('nieuw')
+  })
+
+  it('telt hoeveel gebruikers achterlopen', () => {
+    const r = versionSplit([rij('nieuw', 70, 1), rij('oud', 30, 20)])
+    expect(r.currentUsers).toBe(70)
+    expect(r.oldUsers).toBe(30)
+    expect(r.pctOld).toBe(30)
+  })
+
+  it('zet de grootste groep bovenaan en markeert de huidige', () => {
+    const r = versionSplit([rij('nieuw', 10, 1), rij('oud', 90, 20)])
+    expect(r.rows[0].version).toBe('oud')
+    expect(r.rows.find((x) => x.current)?.version).toBe('nieuw')
+  })
+
+  it('meldt nul achterstand als iedereen bij is', () => {
+    const r = versionSplit([rij('nieuw', 100, 1)])
+    expect(r.pctOld).toBe(0)
+    expect(r.oldUsers).toBe(0)
+  })
+
+  it('valt niet om zonder data', () => {
+    expect(versionSplit(undefined).current).toBeNull()
+    expect(versionSplit([]).pctOld).toBe(0)
+  })
+
+  it('kiest ook iets zinnigs als een tijdstempel onzin is', () => {
+    const kapot = { version: 'kapot', users: 5, sessions: 5, first_seen: '', last_seen: '' }
+    const r = versionSplit([kapot, rij('nieuw', 10, 1)])
+    expect(r.current).toBe('nieuw')
+    expect(r.oldUsers).toBe(5)
   })
 })

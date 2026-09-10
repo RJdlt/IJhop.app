@@ -169,7 +169,7 @@ export const STRINGS: Record<Lang, Strings> = {
       'Tijden volgens de gepubliceerde dienstregeling. De aftelklok loopt live mee op Amsterdamse tijd.',
     offlineReady: 'Werkt offline',
     updateAvailable: 'Nieuwe versie beschikbaar',
-    refreshNow: 'Verversen',
+    refreshNow: 'Vernieuwen',
     langName: 'Nederlands',
     themeLight: 'Licht',
     themeDark: 'Donker',

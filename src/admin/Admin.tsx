@@ -64,6 +64,8 @@ interface Dash {
   /** Pontdeals: trechter per deal en per steiger, plus het terugkeer-verschil
    *  (migratie 0020). */
   deals?: DealsBlock
+  /** Welke appversie draaien de toestellen (migratie 0023). */
+  versions?: VersionRow[]
   hourly: number[]
   dow: number[]
   ferries: PropRow[]
@@ -98,6 +100,14 @@ export interface DealReturn {
   without_deal_returned: number
 }
 export interface DealsBlock { rows: DealMeasureRow[]; by_stop: DealStopRow[]; return: DealReturn }
+/** Eén appversie in het venster. `first_seen` bepaalt welke de nieuwste is. */
+export interface VersionRow {
+  version: string
+  users: number
+  sessions: number
+  first_seen: string
+  last_seen: string
+}
 interface RecentEvent { name: string; props: Record<string, unknown> | null; path: string | null; created_at: string }
 interface AdminRow { user_id: string; email: string | null; created_at: string }
 interface InviteRow { id: string; email: string; status: string; expires_at: string; used_at: string | null; created_at: string }
@@ -439,6 +449,11 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
       { variant: 'B', shown: 380, dismissed: 190, ios_help: 150, installed: 42 },
     ],
     cohorts: demoCohorts,
+    versions: [
+      { version: '4f2a1c9', users: 402, sessions: 610, first_seen: new Date(Date.now() - 2 * 86400000).toISOString(), last_seen: new Date().toISOString() },
+      { version: '9b31d02', users: 61, sessions: 74, first_seen: new Date(Date.now() - 9 * 86400000).toISOString(), last_seen: new Date(Date.now() - 3600000).toISOString() },
+      { version: 'c07e5aa', users: 12, sessions: 13, first_seen: new Date(Date.now() - 20 * 86400000).toISOString(), last_seen: new Date(Date.now() - 7200000).toISOString() },
+    ],
     deals: {
       rows: [
         { deal_id: 'demo-1', offer: 'Pizza margherita 9 euro in plaats van 14', partner: 'Van der Werf',
@@ -512,6 +527,51 @@ export function isoWeekOf(isoDate: string): { year: number; week: number } {
 export function weekLabel(weekStart: string): string {
   const { week } = isoWeekOf(weekStart)
   return week ? `wk ${week}` : '—'
+}
+
+/**
+ * Wie draait er nog op oud?
+ *
+ * De nieuwste versie is die met de meest recente `first_seen`: een build
+ * bestaat pas vanaf het moment van deployen. Sorteren op `last_seen` zou
+ * misleiden, want een oude versie blijft events sturen zolang er toestellen
+ * op vastzitten, en dat is juist wat we willen meten.
+ *
+ * Gebruikers worden per versie geteld, dus iemand die tijdens het venster
+ * bijwerkte telt in allebei. Daarom is het percentage een bovengrens en geen
+ * exacte hoofdtelling; bij dit soort besluiten ("moet ik iets forceren") is
+ * dat de veilige kant.
+ */
+export function versionSplit(rows: VersionRow[] | undefined): {
+  current: string | null
+  currentUsers: number
+  oldUsers: number
+  pctOld: number
+  rows: (VersionRow & { current: boolean })[]
+} {
+  const lijst = rows ?? []
+  if (lijst.length === 0) return { current: null, currentUsers: 0, oldUsers: 0, pctOld: 0, rows: [] }
+  // Een onleesbare tijdstempel telt als oudst denkbaar. Anders wint zo'n rij
+  // de sortering (NaN maakt elke vergelijking onwaar) en zou één kapot event
+  // het dashboard laten melden dat iedereen achterloopt.
+  const gezien = (r: VersionRow) => {
+    const t = Date.parse(r.first_seen || '')
+    return Number.isFinite(t) ? t : -Infinity
+  }
+  const nieuwste = [...lijst].sort((a, b) => gezien(b) - gezien(a))[0]
+  const gemarkeerd = lijst
+    .map((r) => ({ ...r, current: r.version === nieuwste.version }))
+    .sort((a, b) => b.users - a.users)
+  const currentUsers = gemarkeerd.filter((r) => r.current).reduce((n, r) => n + r.users, 0)
+  const oldUsers = gemarkeerd.filter((r) => !r.current).reduce((n, r) => n + r.users, 0)
+  const totaal = currentUsers + oldUsers
+  return {
+    current: nieuwste.version,
+    currentUsers,
+    oldUsers,
+    pctOld: totaal > 0 ? Math.round((oldUsers / totaal) * 100) : 0,
+    rows: gemarkeerd,
+  }
 }
 
 export interface CohortCell { users: number; pct: number }
@@ -971,6 +1031,7 @@ export function Admin() {
   const winLabel = days === 0 ? (win?.days ? `alles, ${nf(win.days)}d` : 'alles') : `${days}d`
   const install = dash?.install ?? []
   const dealBlok = dash?.deals ?? null
+  const versies = versionSplit(dash?.versions)
   const dealRetour = returnLift(dealBlok?.return)
   const cohorts = dash?.cohorts ?? []
   const weekly = dash?.weekly ?? []
@@ -1158,6 +1219,35 @@ export function Admin() {
                   <p className="text-[11px] text-slate-400">Stappen zijn genest: elke stap is een subset van de vorige.</p>
                 </div>
               </Gate>
+            </Panel>
+            <Panel title="Appversies" emoji="🔄" sub="unieke gebruikers per versie">
+              {versies.rows.length === 0 ? (
+                <Empty text="Nog geen versies gemeten. Ze verschijnen zodra de nieuwe build draait." />
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm text-slate-700">
+                    <strong className="tabular-nums">{versies.pctOld}%</strong> zit nog op een oudere
+                    versie
+                    <span className="text-slate-400">
+                      {' '}
+                      ({nf(versies.oldUsers)} van {nf(versies.oldUsers + versies.currentUsers)})
+                    </span>
+                  </p>
+                  <BarList
+                    rows={versies.rows.map((r) => ({
+                      label: r.current ? `${r.version} (nu)` : r.version,
+                      value: r.users,
+                      color: r.current ? undefined : '#94a3b8',
+                      title: `laatst gezien ${new Date(r.last_seen).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`,
+                    }))}
+                  />
+                  <p className="text-[11px] leading-relaxed text-slate-400">
+                    De nieuwste versie is die met de recentste eerste melding. Wie tijdens dit
+                    venster bijwerkte telt in allebei de groepen, dus dit percentage is een
+                    bovengrens.
+                  </p>
+                </div>
+              )}
             </Panel>
             <Panel title={`Pontdeals (${winLabel})`} emoji="🍕" sub="unieke gebruikers per stap">
               {!dealBlok || dealBlok.rows.length === 0 ? (
