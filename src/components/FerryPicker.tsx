@@ -18,8 +18,9 @@ interface FerryPickerProps {
 }
 
 /**
- * Laat je kiezen op welke afvaart je wacht. Die keuze bepaalt met wie je
- * elkaar kunt vinden op de pont (Pont Ontmoeting). Live aftelklok per richting.
+ * Laat je kiezen op welke afvaart je wacht, met een live aftelklok per
+ * richting. Die keuze bepaalt ook welke Pontdeal je te zien krijgt: die van
+ * jouw steiger, niet die van de andere kant van het IJ.
  */
 export function FerryPicker({ options, value, onChange }: FerryPickerProps) {
   const { t } = useI18n()

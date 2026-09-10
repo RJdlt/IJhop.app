@@ -11,6 +11,10 @@ export default {
         // IJhop brand
         brand: {
           DEFAULT: '#1D9E75',
+          // Donkerder merkgroen voor vlakken met witte tekst erop. Het
+          // gewone merkgroen haalt met wit maar 3,4:1 en zakt daarmee door
+          // de AA-ondergrens voor kleine tekst; deze tint zit op 5,0:1.
+          deep: '#177F5E',
           dark: '#04342C',
         },
         // GVB ferry line colours
@@ -42,10 +46,17 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        // Voor de Pontdeal: kort en klein. Geen stuiter, geen confetti; de
+        // kaart komt binnen zonder de klok te overstemmen.
+        dealIn: {
+          '0%': { opacity: '0', transform: 'translateY(4px) scale(0.99)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
       },
       animation: {
         pulseDot: 'pulseDot 1.6s ease-in-out infinite',
         riseIn: 'riseIn 0.4s ease-out both',
+        dealIn: 'dealIn 0.2s ease-out both',
       },
     },
   },

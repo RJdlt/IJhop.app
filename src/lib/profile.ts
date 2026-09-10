@@ -11,6 +11,10 @@
 import { durableStorage } from './durableStorage'
 import { ensureAnonSession } from './supabase'
 import { randomId } from './id'
+import { amsterdamDay } from './time'
+
+// Blijft hier beschikbaar voor bestaande imports.
+export { amsterdamDay }
 
 export type Variant = 'A' | 'B'
 
@@ -41,20 +45,6 @@ export function variantFor(id: string): Variant {
     h = Math.imul(h, 16777619)
   }
   return (h >>> 0) % 2 === 0 ? 'A' : 'B'
-}
-
-/** Amsterdamse kalenderdag als YYYY-MM-DD, ook als de telefoon elders staat. */
-export function amsterdamDay(d: Date = new Date()): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Europe/Amsterdam',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(d)
-  } catch {
-    return d.toISOString().slice(0, 10)
-  }
 }
 
 /**

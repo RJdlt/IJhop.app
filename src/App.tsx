@@ -5,11 +5,13 @@ import { CatchPanel } from './components/CatchPanel'
 import { Footer } from './components/Footer'
 import { InstallPrompt } from './components/InstallPrompt'
 import { SponsorCard } from './components/SponsorCard'
-import { OntmoetingCard } from './components/OntmoetingCard'
 import { OnboardingFavorites } from './components/OnboardingFavorites'
 import { DisruptionBanner } from './components/DisruptionBanner'
 import { PrizeEntry } from './components/PrizeEntry'
 import { FerryPicker } from './components/FerryPicker'
+import { DealCard } from './components/DealCard'
+import { DealRedeem } from './components/DealRedeem'
+import { TipFriend } from './components/TipFriend'
 import type { FerryOption } from './components/FerryPicker'
 import { useNow } from './hooks/useNow'
 import { useAnonSession } from './hooks/useAnonSession'
@@ -20,6 +22,7 @@ import { amsterdamMoment } from './lib/time'
 import { CONNECTIONS, LINES, LINE_IDS, nextDepartures, timetable } from './lib/schedule'
 import { NotificationOptIn } from './components/NotificationOptIn'
 import { bumpVisits, shouldOfferPrize, markPrizeSeen } from './lib/prize'
+import { useDeal } from './hooks/useDeal'
 import type { StopPair } from './lib/schedule'
 import type { LineId } from './types'
 
@@ -168,14 +171,29 @@ export default function App() {
   )
 
   const watched = watchKey ? ferryOptions.find((o) => o.key === watchKey) ?? null : null
-  const watchedSecs = watched?.secondsUntil
 
-  // Pont Ontmoeting: overtocht-kamer zodra je een pont kiest (lijn + vertrekmoment),
-  // zodat twee mensen op dezelfde afvaart elkaar kunnen vinden.
-  const ontmoetingRoom =
-    watched && watchedSecs != null
-      ? `${watched.key}@${Math.floor(nowSecondOfWeek + watchedSecs)}`
-      : null
+  // Pontdeals: welke steigers zijn voor deze bezoeker relevant? De pont waar
+  // hij op wacht telt het zwaarst, daarna zijn favoriete lijnen. Zonder dat
+  // alles krijgt hij niets te zien in plaats van de deal van een steiger waar
+  // hij nooit komt.
+  const dealStops = useMemo(() => {
+    const stops = new Set<string>()
+    if (watched) {
+      stops.add(watched.from)
+      stops.add(watched.to)
+    }
+    for (const line of favLines) for (const stop of LINES[line]?.connects ?? []) stops.add(stop)
+    return [...stops]
+  }, [watched, favLines])
+
+  const { deal, next: nextDeal, redeemedWeek, code: dealCode, claim } = useDeal(dealStops)
+  const [redeemOpen, setRedeemOpen] = useState(false)
+  const grabDeal = async () => {
+    if (!deal) return
+    track('deal_claim', { deal_id: deal.id, had_code: dealCode != null })
+    const res = dealCode ?? (await claim())
+    if (res) setRedeemOpen(true)
+  }
 
   // Eenmalige, rustige uitnodiging voor de prijzenactie. Niet bij het eerste
   // bezoek: pas als iemand de app vaker opent is de vraag gepast.
@@ -229,8 +247,18 @@ export default function App() {
           {/* Direct onder de klok: daar is net bewezen waar de app voor is. */}
           <InstallPrompt />
 
+          {/* De deal staat onder de klok, nooit erboven: hij is een beloning
+              voor wie toch al wacht. */}
+          <DealCard
+            deal={deal}
+            next={nextDeal}
+            redeemedWeek={redeemedWeek}
+            hasCode={dealCode != null}
+            onGrab={grabDeal}
+          />
+          <TipFriend redeemedAt={dealCode?.redeemed_at ?? null} />
+
           <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
-          {ontmoetingRoom && <OntmoetingCard room={ontmoetingRoom} userId={userId} />}
           <CatchPanel nowSecondOfWeek={nowSecondOfWeek} />
           <NotificationOptIn favLines={favLines} />
           {offerPrize && <PrizeEntry />}
@@ -241,6 +269,10 @@ export default function App() {
           <Footer />
         </div>
       </div>
+
+      {redeemOpen && deal && dealCode && (
+        <DealRedeem deal={deal} code={dealCode} onClose={() => setRedeemOpen(false)} />
+      )}
 
       {!onboarded && (
         <OnboardingFavorites favs={favs} onToggle={toggleFav} onDone={finishOnboarding} />

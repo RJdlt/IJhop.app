@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { LINES, STOPS } from '../lib/schedule'
+import { DealsAdmin } from './DealsAdmin'
 
 // ---- Types -----------------------------------------------------------------
 // Eén dashboard-RPC (migratie 0012) levert alles: consistent Europe/Amsterdam,
@@ -60,6 +61,9 @@ interface Dash {
   install?: InstallRow[]
   /** Weekretentie per cohort (migratie 0018). */
   cohorts?: CohortRow[]
+  /** Pontdeals: trechter per deal en per steiger, plus het terugkeer-verschil
+   *  (migratie 0020). */
+  deals?: DealsBlock
   hourly: number[]
   dow: number[]
   ferries: PropRow[]
@@ -70,6 +74,30 @@ export interface InstallRow { variant: string; shown: number; dismissed: number;
 /** Eén cohort: `weeks[k]` is het aantal actieve gebruikers in week k+1 na de
  *  eerste week, of null zolang die week nog niet voorbij is. */
 export interface CohortRow { week_start: string; size: number; weeks: (number | null)[] }
+/** Eén deal in de meting. `seen`, `claimed` en `shown` tellen unieke
+ *  gebruikers uit de events; `redeemed` komt uit `deal_codes` en is dus de
+ *  enige die niet op een event steunt. */
+export interface DealMeasureRow {
+  deal_id: string
+  offer: string
+  partner: string
+  stop_id: string
+  valid_from: string
+  valid_to: string
+  seen: number
+  claimed: number
+  shown: number
+  codes: number
+  redeemed: number
+}
+export interface DealStopRow { value: string | null; seen: number; claimed: number; redeemed: number }
+export interface DealReturn {
+  with_deal: number
+  with_deal_returned: number
+  without_deal: number
+  without_deal_returned: number
+}
+export interface DealsBlock { rows: DealMeasureRow[]; by_stop: DealStopRow[]; return: DealReturn }
 interface RecentEvent { name: string; props: Record<string, unknown> | null; path: string | null; created_at: string }
 interface AdminRow { user_id: string; email: string | null; created_at: string }
 interface InviteRow { id: string; email: string; status: string; expires_at: string; used_at: string | null; created_at: string }
@@ -115,6 +143,8 @@ const VARIANT_LABEL: Record<string, string> = {
   B: 'B · eerste bezoek, na 30 seconden',
   onbekend: 'Zonder arm (oude events)',
 }
+/** Steigernaam voor het dashboard; onbekende of ontbrekende ids blijven leesbaar. */
+const STOP_LABEL = (id: string | null) => (id ? (STOPS[id]?.name ?? id) : UNKNOWN_LABEL)
 const nf = (n: number) => (Number.isFinite(n) ? n : 0).toLocaleString('nl-NL')
 
 function fmtDuration(sec: number): string {
@@ -409,6 +439,16 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
       { variant: 'B', shown: 380, dismissed: 190, ios_help: 150, installed: 42 },
     ],
     cohorts: demoCohorts,
+    deals: {
+      rows: [
+        { deal_id: 'demo-1', offer: 'Pizza margherita 9 euro in plaats van 14', partner: 'Van der Werf',
+          stop_id: 'ndsm', valid_from: new Date(Date.now() - 5 * 86400000).toISOString(),
+          valid_to: new Date(Date.now() - 2 * 86400000).toISOString(),
+          seen: 210, claimed: 64, shown: 58, codes: 64, redeemed: 31 },
+      ],
+      by_stop: [{ value: 'ndsm', seen: 210, claimed: 64, redeemed: 31 }],
+      return: { with_deal: 64, with_deal_returned: 29, without_deal: 240, without_deal_returned: 62 },
+    },
     hourly, dow,
     ferries: [
       { value: 'F4:ndsm:centraal', users: 180, events: 340 },
@@ -499,6 +539,32 @@ export function cohortShade(pct: number): string {
   if (pct >= 12) return 'bg-brand/35 text-slate-800'
   if (pct > 0) return 'bg-brand/15 text-slate-700'
   return 'bg-slate-50 text-slate-400'
+}
+
+/** De vier stappen van een deal, met het aandeel van wie de kaart zag. De
+ *  noemer is steeds `seen`: dat is het aantal mensen aan wie we iets hebben
+ *  laten zien, en alleen daarop kun je de rest afrekenen. */
+export function dealFunnel(r: DealMeasureRow): { label: string; value: number; pct: number }[] {
+  const basis = Math.max(1, r.seen)
+  return [
+    { label: 'Kaart gezien', value: r.seen },
+    { label: 'Pak je deal', value: r.claimed },
+    { label: 'Code getoond', value: r.shown },
+    { label: 'Ingewisseld', value: r.redeemed },
+  ].map((s) => ({ ...s, pct: Math.round((s.value / basis) * 100) }))
+}
+
+/** Terugkeer met en zonder deal. `lift` is het verschil in procentpunten;
+ *  null zolang een van beide groepen te klein is om iets te betekenen. */
+export function returnLift(r: DealReturn | undefined, min = 20): {
+  met: number
+  zonder: number
+  lift: number | null
+} {
+  const met = r && r.with_deal > 0 ? Math.round((r.with_deal_returned / r.with_deal) * 100) : 0
+  const zonder = r && r.without_deal > 0 ? Math.round((r.without_deal_returned / r.without_deal) * 100) : 0
+  const genoeg = !!r && r.with_deal >= min && r.without_deal >= min
+  return { met, zonder, lift: genoeg ? met - zonder : null }
 }
 
 export interface Gap {
@@ -904,6 +970,8 @@ export function Admin() {
   // Bij "Alles" toont de kop de werkelijke spanwijdte die de RPC teruggaf.
   const winLabel = days === 0 ? (win?.days ? `alles, ${nf(win.days)}d` : 'alles') : `${days}d`
   const install = dash?.install ?? []
+  const dealBlok = dash?.deals ?? null
+  const dealRetour = returnLift(dealBlok?.return)
   const cohorts = dash?.cohorts ?? []
   const weekly = dash?.weekly ?? []
   const newret = dash?.newret ?? []
@@ -1091,6 +1159,76 @@ export function Admin() {
                 </div>
               </Gate>
             </Panel>
+            <Panel title={`Pontdeals (${winLabel})`} emoji="🍕" sub="unieke gebruikers per stap">
+              {!dealBlok || dealBlok.rows.length === 0 ? (
+                <Empty text="Nog geen Pontdeals gemeten. Plan er een in en draai migratie 0020." />
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {dealBlok.rows.map((r) => (
+                    <div key={r.deal_id}>
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="truncate text-sm font-semibold text-slate-700">{r.partner}</span>
+                        <span className="shrink-0 text-[11px] text-slate-400">
+                          {STOP_LABEL(r.stop_id)} ·{' '}
+                          {new Date(r.valid_from).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                      <p className="truncate text-xs text-slate-500">{r.offer}</p>
+                      <div className="mt-1.5 flex flex-col gap-1">
+                        {dealFunnel(r).map((stap) => (
+                          <div key={stap.label} className="flex items-center gap-2">
+                            <span className="w-24 shrink-0 text-[11px] text-slate-500">{stap.label}</span>
+                            <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-brand to-teal-500"
+                                style={{ width: `${Math.min(100, stap.pct)}%` }}
+                              />
+                            </div>
+                            <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-slate-600">
+                              {nf(stap.value)} · {stap.pct}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {dealBlok.by_stop.length > 1 && (
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Per steiger
+                      </p>
+                      <BarList
+                        rows={dealBlok.by_stop.map((s) => ({
+                          label: STOP_LABEL(s.value),
+                          value: s.redeemed,
+                          title: `${nf(s.seen)} zagen de kaart, ${nf(s.claimed)} pakten hem`,
+                        }))}
+                        color="bg-amber-500"
+                      />
+                    </div>
+                  )}
+
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Kwam men terug de week erna
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">
+                      <strong className="tabular-nums">{dealRetour.met}%</strong> met een deal
+                      <span className="text-slate-400"> (n={nf(dealBlok.return.with_deal)})</span>
+                      <span className="text-slate-400"> · </span>
+                      <strong className="tabular-nums">{dealRetour.zonder}%</strong> zonder
+                      <span className="text-slate-400"> (n={nf(dealBlok.return.without_deal)})</span>
+                    </p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                      {dealRetour.lift == null
+                        ? 'Nog te weinig mensen in een van beide groepen om iets te zeggen.'
+                        : `Verschil: ${dealRetour.lift > 0 ? '+' : ''}${dealRetour.lift} procentpunt. Wie een deal pakt was waarschijnlijk toch al enthousiaster, dus dit is geen bewijs van oorzaak.`}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </Panel>
             <Panel title={`Installatie (${winLabel})`} emoji="📲" sub="unieke gebruikers per arm van de proef">
               {install.length === 0 ? (
                 <Empty text="Nog geen installatie-events. Ze verschijnen zodra de nieuwe uitnodiging live is." />
@@ -1223,6 +1361,9 @@ export function Admin() {
           {testMsg && !demo && <p className="mt-2 text-xs text-slate-500">{testMsg}</p>}
         </Panel>
       </div>
+
+      {/* Pontdeals beheren */}
+      <DealsAdmin />
 
       {/* Inzendingen prijzenactie */}
       <div className="mt-4">

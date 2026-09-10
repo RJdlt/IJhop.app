@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   cohortCells,
+  dealFunnel,
+  returnLift,
   cohortShade,
   installRate,
   parseFerryKey,
@@ -376,5 +378,47 @@ describe('cohortShade', () => {
     expect(cohortShade(0)).toContain('slate')
     expect(cohortShade(5)).not.toBe(cohortShade(0))
     expect(cohortShade(50)).toContain('bg-brand')
+  })
+})
+
+describe('dealFunnel', () => {
+  const rij = {
+    deal_id: 'd1', offer: 'Pizza margherita 9 euro in plaats van 14', partner: 'Van der Werf',
+    stop_id: 'ndsm', valid_from: '2026-09-07T00:00:00Z', valid_to: '2026-09-09T21:59:59Z',
+    seen: 200, claimed: 60, shown: 55, codes: 60, redeemed: 30,
+  }
+
+  it('zet elke stap af tegen wie de kaart zag', () => {
+    expect(dealFunnel(rij).map((s) => s.pct)).toEqual([100, 30, 28, 15])
+  })
+
+  it('houdt de vier stappen in volgorde', () => {
+    expect(dealFunnel(rij).map((s) => s.label)).toEqual([
+      'Kaart gezien', 'Pak je deal', 'Code getoond', 'Ingewisseld',
+    ])
+  })
+
+  it('deelt niet door nul bij een deal die niemand zag', () => {
+    const leeg = { ...rij, seen: 0, claimed: 0, shown: 0, codes: 0, redeemed: 0 }
+    expect(dealFunnel(leeg).every((s) => s.pct === 0)).toBe(true)
+  })
+})
+
+describe('returnLift', () => {
+  it('rekent beide groepen om naar procenten', () => {
+    const r = returnLift({ with_deal: 100, with_deal_returned: 45, without_deal: 200, without_deal_returned: 25 })
+    expect(r.met).toBe(45)
+    expect(r.zonder).toBe(13)
+    expect(r.lift).toBe(32)
+  })
+
+  it('houdt zijn mond bij een te kleine groep', () => {
+    const r = returnLift({ with_deal: 4, with_deal_returned: 3, without_deal: 300, without_deal_returned: 30 })
+    expect(r.met).toBe(75)
+    expect(r.lift).toBeNull()
+  })
+
+  it('valt niet om zonder data', () => {
+    expect(returnLift(undefined)).toEqual({ met: 0, zonder: 0, lift: null })
   })
 })

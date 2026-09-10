@@ -76,6 +76,24 @@ export interface Strings {
   lastUpdated: string
   whichFerry: string
   noFerryChosen: string
+  deals: {
+    badge: string
+    teaser: string
+    grab: string
+    walkFrom: string
+    yourCode: string
+    savedInApp: string
+    validUntil: string
+    route: string
+    howTo: string
+    redeemed: string
+    redeemedNote: string
+    redeemedThisWeek: string
+    close: string
+    tipFriend: string
+    tipShare: string
+    offlineNote: string
+  }
   install: {
     line: string
     button: string
@@ -160,6 +178,24 @@ export const STRINGS: Record<Lang, Strings> = {
     lastUpdated: 'Dienstregeling bijgewerkt',
     whichFerry: 'Welke pont wacht je op?',
     noFerryChosen: 'Even geen pont',
+    deals: {
+      badge: 'Pontdeal',
+      teaser: 'Volgende Pontdeal: maandag',
+      grab: 'Pak je deal',
+      walkFrom: 'min van',
+      yourCode: 'Jouw code',
+      savedInApp: 'bewaard in de app',
+      validUntil: 'geldig t/m woensdag 23:59',
+      route: 'Route',
+      howTo: 'Zo werkt het: laat dit scherm zien bij de kassa.',
+      redeemed: 'Ingewisseld',
+      redeemedNote: 'Fijne dag verder.',
+      redeemedThisWeek: 'keer ingewisseld deze week',
+      close: 'Terug naar de klok',
+      tipFriend: 'Tip een vriend',
+      tipShare: 'Elke week een deal voor wie op de pont wacht.',
+      offlineNote: 'Je code staat in de app, ook zonder bereik.',
+    },
     install: {
       line: 'Zet IJhop op je beginscherm: één tik en je ziet de volgende pont, ook zonder internet.',
       button: 'Zet op beginscherm',
@@ -242,6 +278,24 @@ export const STRINGS: Record<Lang, Strings> = {
     lastUpdated: 'Timetable updated',
     whichFerry: 'Which ferry are you waiting for?',
     noFerryChosen: 'No ferry right now',
+    deals: {
+      badge: 'Ferry deal',
+      teaser: 'Next ferry deal: Monday',
+      grab: 'Get your deal',
+      walkFrom: 'min from',
+      yourCode: 'Your code',
+      savedInApp: 'saved in the app',
+      validUntil: 'valid until Wednesday 23:59',
+      route: 'Directions',
+      howTo: 'How it works: show this screen at the counter.',
+      redeemed: 'Redeemed',
+      redeemedNote: 'Enjoy your day.',
+      redeemedThisWeek: 'redeemed this week',
+      close: 'Back to the clock',
+      tipFriend: 'Tell a friend',
+      tipShare: 'A deal every week for anyone waiting for the ferry.',
+      offlineNote: 'Your code stays in the app, even without signal.',
+    },
     install: {
       line: 'Add IJhop to your home screen: one tap and you see the next ferry, even without internet.',
       button: 'Add to home screen',
