@@ -6,6 +6,12 @@
  * leiden we af uit session_start + periodieke heartbeats per `session_id`.
  */
 import { supabase, ensureAnonSession } from './supabase'
+import { randomId } from './id'
+import { profile, markInstalledReported } from './profile'
+import { isStandalone } from './display'
+
+// Blijft hier beschikbaar voor bestaande imports; de implementatie staat in id.ts.
+export { randomId }
 
 const SESSION_KEY = 'ijhop:analytics:session'
 
@@ -13,19 +19,6 @@ const SESSION_KEY = 'ijhop:analytics:session'
  *  kunnen meten (30s × 20 = 10 minuten) en hoeveel events dat maximaal kost. */
 export const HEARTBEAT_MS = 30_000
 export const HEARTBEAT_MAX = 20
-
-/** Willekeurig id, ook als crypto.randomUUID ontbreekt (oudere Safari, niet-
- *  beveiligde context). Faalt nooit, want hierop hangt de sessie-telling. */
-export function randomId(): string {
-  try {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID()
-    }
-  } catch {
-    /* val door naar de eenvoudige variant */
-  }
-  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-}
 
 // Reserve-sessie-id in het geheugen, per pagina-instantie.
 let memorySessionId: string | null = null
@@ -73,6 +66,18 @@ export async function track(name: string, props?: Record<string, unknown>): Prom
   }
 }
 
+let installReported = false
+
+/** Meldt één keer per bezoeker dat IJhop geïnstalleerd is. */
+async function reportInstalled(source: 'appinstalled' | 'display-mode'): Promise<void> {
+  if (installReported) return
+  installReported = true
+  const p = await profile()
+  if (p.installed_reported) return
+  await markInstalledReported()
+  await track('installed', { source, variant: p.variant, visit_nr: p.visits })
+}
+
 let started = false
 
 /** Start auto-tracking: sessiestart, zichtbaarheid en heartbeats. */
@@ -83,12 +88,17 @@ export function startAnalytics(): void {
   track('session_start', {
     ref: document.referrer || null,
     lang: navigator.language,
-    standalone:
-      window.matchMedia?.('(display-mode: standalone)').matches ||
-      (window.navigator as Navigator & { standalone?: boolean }).standalone === true,
+    standalone: isStandalone(),
     w: window.screen?.width ?? null,
     h: window.screen?.height ?? null,
   })
+
+  // Installatie meten. `appinstalled` vuurt alleen op Android en desktop
+  // Chrome; iOS kent dat event niet. Van een iPhone krijgen we maar één
+  // signaal dat de app op het beginscherm staat, namelijk dat de app in
+  // standalone draait. Daarom melden we ook de eerste sessie die zo start.
+  window.addEventListener('appinstalled', () => void reportInstalled('appinstalled'))
+  if (isStandalone()) void reportInstalled('display-mode')
 
   document.addEventListener('visibilitychange', () => {
     track(document.visibilityState === 'visible' ? 'app_visible' : 'app_hidden')

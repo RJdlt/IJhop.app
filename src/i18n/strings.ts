@@ -77,14 +77,11 @@ export interface Strings {
   whichFerry: string
   noFerryChosen: string
   install: {
-    title: string
-    subtitle: string
-    iosTitle: string
-    ios1: string
-    ios2: string
-    ios3: string
+    line: string
     button: string
     dismiss: string
+    step1: string
+    step2: string
   }
 }
 
@@ -164,14 +161,11 @@ export const STRINGS: Record<Lang, Strings> = {
     whichFerry: 'Welke pont wacht je op?',
     noFerryChosen: 'Even geen pont',
     install: {
-      title: 'Zet IJhop op je beginscherm',
-      subtitle: 'Open ’m als een echte app — schermvullend, sneller te openen en werkt offline.',
-      iosTitle: 'Toevoegen op iPhone of iPad',
-      ios1: 'Tik op het deelknopje onderaan in Safari',
-      ios2: 'Tik op “Zet op beginscherm”',
-      ios3: 'Open IJhop voortaan via het icoon op je startscherm',
+      line: 'Zet IJhop op je beginscherm: één tik en je ziet de volgende pont, ook zonder internet.',
       button: 'Zet op beginscherm',
       dismiss: 'Niet nu',
+      step1: 'Tik op het deelknopje onderaan in Safari',
+      step2: 'Tik op “Zet op beginscherm”',
     },
   },
   en: {
@@ -249,14 +243,11 @@ export const STRINGS: Record<Lang, Strings> = {
     whichFerry: 'Which ferry are you waiting for?',
     noFerryChosen: 'No ferry right now',
     install: {
-      title: 'Add IJhop to your home screen',
-      subtitle: 'Open it like a real app — full screen, quicker to launch and works offline.',
-      iosTitle: 'Add it on iPhone or iPad',
-      ios1: 'Tap the share button at the bottom of Safari',
-      ios2: 'Tap “Add to Home Screen”',
-      ios3: 'From now on open IJhop via the icon on your home screen',
+      line: 'Add IJhop to your home screen: one tap and you see the next ferry, even without internet.',
       button: 'Add to home screen',
       dismiss: 'Not now',
+      step1: 'Tap the share button at the bottom of Safari',
+      step2: 'Tap “Add to Home Screen”',
     },
   },
 }

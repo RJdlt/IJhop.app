@@ -56,11 +56,20 @@ interface Dash {
    *  gebruiker, dus ook server-side (migratie 0016). */
   newret?: NewRet[]
   funnel: { sessions: number; clock: number; notified: number }
+  /** Installatie-trechter per arm van de A/B-proef (migratie 0018). */
+  install?: InstallRow[]
+  /** Weekretentie per cohort (migratie 0018). */
+  cohorts?: CohortRow[]
   hourly: number[]
   dow: number[]
   ferries: PropRow[]
   devices: PropRow[]
 }
+/** Eén arm van de installatie-proef; tellingen zijn unieke gebruikers. */
+export interface InstallRow { variant: string; shown: number; dismissed: number; ios_help: number; installed: number }
+/** Eén cohort: `weeks[k]` is het aantal actieve gebruikers in week k+1 na de
+ *  eerste week, of null zolang die week nog niet voorbij is. */
+export interface CohortRow { week_start: string; size: number; weeks: (number | null)[] }
 interface RecentEvent { name: string; props: Record<string, unknown> | null; path: string | null; created_at: string }
 interface AdminRow { user_id: string; email: string | null; created_at: string }
 interface InviteRow { id: string; email: string; status: string; expires_at: string; used_at: string | null; created_at: string }
@@ -84,6 +93,10 @@ const EVENT_META: Record<string, { emoji: string; label: string }> = {
   share_score: { emoji: '📸', label: 'Score gedeeld' },
   passagiers_afgeleverd: { emoji: '🧳', label: 'Passagiers afgeleverd' },
   skin_select: { emoji: '🎨', label: 'Pontskin gekozen' },
+  install_prompt_shown: { emoji: '📲', label: 'Install-uitnodiging getoond' },
+  install_prompt_dismissed: { emoji: '🙅', label: 'Install-uitnodiging weggeklikt' },
+  install_prompt_ios_help_opened: { emoji: '🍎', label: 'iOS-uitleg geopend' },
+  installed: { emoji: '🏠', label: 'Op beginscherm gezet' },
   push_subscribe: { emoji: '🔔', label: 'Pushmeldingen aan' },
   push_unsubscribe: { emoji: '🔕', label: 'Pushmeldingen uit' },
   push_subscribe_failed: { emoji: '⚠️', label: 'Push aanzetten mislukt' },
@@ -96,6 +109,12 @@ const EVENT_META: Record<string, { emoji: string; label: string }> = {
 }
 const meta = (n: string) => EVENT_META[n] ?? { emoji: '•', label: n }
 const DOW = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo']
+/** Leesbare naam per arm van de installatie-proef. */
+const VARIANT_LABEL: Record<string, string> = {
+  A: 'A · vanaf het tweede bezoek',
+  B: 'B · eerste bezoek, na 30 seconden',
+  onbekend: 'Zonder arm (oude events)',
+}
 const nf = (n: number) => (Number.isFinite(n) ? n : 0).toLocaleString('nl-NL')
 
 function fmtDuration(sec: number): string {
@@ -350,6 +369,16 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
   })
   const demoWeeks = demoWeekly(daily)
   const demoRet = demoNewRet(demoWeeks)
+  // Zes cohorten, jongste bovenaan; de jongste weken zijn nog niet voorbij.
+  const demoCohorts: CohortRow[] = Array.from({ length: 6 }, (_, i) => {
+    const start = new Date(today)
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7) - i * 7)
+    const size = rnd(24, 70)
+    const weeks = Array.from({ length: 4 }, (_, k) =>
+      k + 1 > i ? null : Math.round(size * [0.32, 0.24, 0.19, 0.16][k] * (0.8 + Math.random() * 0.4)),
+    )
+    return { week_start: start.toISOString().slice(0, 10), size, weeks }
+  })
   const hourly = Array.from({ length: 24 }, (_, h) =>
     (h >= 7 && h <= 9) || (h >= 16 && h <= 18) ? rnd(60, 140) : h >= 1 && h <= 5 ? rnd(0, 6) : rnd(10, 50),
   )
@@ -375,6 +404,11 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
     weekly: demoWeeks,
     newret: demoRet.rows,
     funnel: { sessions: 900, clock: 615, notified: 48 },
+    install: [
+      { variant: 'A', shown: 210, dismissed: 74, ios_help: 96, installed: 31 },
+      { variant: 'B', shown: 380, dismissed: 190, ios_help: 150, installed: 42 },
+    ],
+    cohorts: demoCohorts,
     hourly, dow,
     ferries: [
       { value: 'F4:ndsm:centraal', users: 180, events: 340 },
@@ -438,6 +472,33 @@ export function isoWeekOf(isoDate: string): { year: number; week: number } {
 export function weekLabel(weekStart: string): string {
   const { week } = isoWeekOf(weekStart)
   return week ? `wk ${week}` : '—'
+}
+
+export interface CohortCell { users: number; pct: number }
+
+/** Zet één cohortrij om in percentages. Een week die nog niet voorbij is
+ *  blijft null en hoort leeg te blijven: als 0% lezen zou elk jong cohort
+ *  als mislukt oogmerken. */
+export function cohortCells(row: CohortRow, weeks = 4): (CohortCell | null)[] {
+  return Array.from({ length: weeks }, (_, i) => {
+    const v = row.weeks?.[i]
+    if (v == null || !Number.isFinite(v)) return null
+    return { users: v, pct: row.size > 0 ? Math.round((v / row.size) * 100) : 0 }
+  })
+}
+
+/** Aandeel van wie de uitnodiging zag en ook installeerde. */
+export function installRate(r: InstallRow): number {
+  return r.shown > 0 ? Math.round((r.installed / r.shown) * 100) : 0
+}
+
+/** Achtergrond voor een retentiecel: hoe hoger, hoe voller. */
+export function cohortShade(pct: number): string {
+  if (pct >= 40) return 'bg-brand text-white'
+  if (pct >= 25) return 'bg-brand/60 text-white'
+  if (pct >= 12) return 'bg-brand/35 text-slate-800'
+  if (pct > 0) return 'bg-brand/15 text-slate-700'
+  return 'bg-slate-50 text-slate-400'
 }
 
 export interface Gap {
@@ -842,6 +903,8 @@ export function Admin() {
   const lineUsage = dash ? aggregateByLine(dash.ferries) : []
   // Bij "Alles" toont de kop de werkelijke spanwijdte die de RPC teruggaf.
   const winLabel = days === 0 ? (win?.days ? `alles, ${nf(win.days)}d` : 'alles') : `${days}d`
+  const install = dash?.install ?? []
+  const cohorts = dash?.cohorts ?? []
   const weekly = dash?.weekly ?? []
   const newret = dash?.newret ?? []
   const gap = dash ? findMeasurementGap(dash.daily) : null
@@ -1027,6 +1090,84 @@ export function Admin() {
                   <p className="text-[11px] text-slate-400">Stappen zijn genest: elke stap is een subset van de vorige.</p>
                 </div>
               </Gate>
+            </Panel>
+            <Panel title={`Installatie (${winLabel})`} emoji="📲" sub="unieke gebruikers per arm van de proef">
+              {install.length === 0 ? (
+                <Empty text="Nog geen installatie-events. Ze verschijnen zodra de nieuwe uitnodiging live is." />
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {install.map((r) => {
+                    const pct = installRate(r)
+                    return (
+                      <div key={r.variant}>
+                        <div className="flex items-baseline justify-between text-sm">
+                          <span className="font-semibold text-slate-700">
+                            {VARIANT_LABEL[r.variant] ?? `Arm ${r.variant}`}
+                          </span>
+                          <span className="tabular-nums text-slate-500">
+                            {nf(r.shown)} zagen → {nf(r.installed)} installeerden
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-full rounded-full bg-gradient-to-r from-brand to-teal-500" style={{ width: `${Math.min(100, pct)}%` }} />
+                          </div>
+                          <span className="w-10 shrink-0 text-right text-xs font-bold tabular-nums text-slate-700">{pct}%</span>
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-slate-400">
+                          n={nf(r.shown)} · {nf(r.dismissed)} weggeklikt · {nf(r.ios_help)} keer de iOS-uitleg geopend
+                        </p>
+                      </div>
+                    )
+                  })}
+                  <p className="text-[11px] text-slate-400">
+                    A vraagt het vanaf het tweede bezoek, B al bij het eerste na 30 seconden kijken. Onder de honderd per arm zegt het verschil nog niets.
+                  </p>
+                </div>
+              )}
+            </Panel>
+            <Panel title="Weekretentie per cohort" emoji="🪃" sub="rijen: week van het eerste bezoek">
+              {cohorts.length === 0 ? (
+                <Empty text="Nog geen cohorten. Draai migratie 0018 en wacht een week." />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                        <th className="py-1 pr-2 font-semibold">Cohort</th>
+                        <th className="pr-2 font-semibold">n</th>
+                        {[1, 2, 3, 4].map((w) => (
+                          <th key={w} className="px-1 text-center font-semibold">wk {w}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cohorts.map((row) => (
+                        <tr key={row.week_start} className="border-t border-slate-100">
+                          <td className="py-1 pr-2 whitespace-nowrap text-slate-600">
+                            {weekLabel(row.week_start)} · {new Date(row.week_start).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+                          </td>
+                          <td className="pr-2 tabular-nums text-slate-500">{nf(row.size)}</td>
+                          {cohortCells(row).map((cell, i) => (
+                            <td key={i} className="px-0.5 py-0.5">
+                              {cell === null ? (
+                                <div className="rounded-md bg-slate-50 py-1 text-center text-slate-300">·</div>
+                              ) : (
+                                <div className={`rounded-md py-1 text-center font-semibold tabular-nums ${cohortShade(cell.pct)}`} title={`${nf(cell.users)} van ${nf(row.size)}`}>
+                                  {cell.pct}%
+                                </div>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    Aandeel van het cohort met minstens één sessie in die week. Een punt betekent: die week is nog niet voorbij. Dit telt gebruikers-ids, dus zolang opslag gewist kan worden ligt de echte retentie hoger.
+                  </p>
+                </div>
+              )}
             </Panel>
             <Panel title="Piekuren (sessies per uur)" emoji="🕑" sub={`n=${nf(win?.sessions ?? 0)} sessies`}>
               <Gate n={win?.events ?? 0} min={30} unit="events">

@@ -226,10 +226,12 @@ export default function App() {
             </>
           )}
 
+          {/* Direct onder de klok: daar is net bewezen waar de app voor is. */}
+          <InstallPrompt />
+
           <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
           {ontmoetingRoom && <OntmoetingCard room={ontmoetingRoom} userId={userId} />}
           <CatchPanel nowSecondOfWeek={nowSecondOfWeek} />
-          <InstallPrompt />
           <NotificationOptIn favLines={favLines} />
           {offerPrize && <PrizeEntry />}
           <SponsorCard />

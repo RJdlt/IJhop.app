@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cohortCells,
+  cohortShade,
+  installRate,
   parseFerryKey,
   ferryRouteLabel,
   aggregateByLine,
@@ -325,5 +328,53 @@ describe('returningLine', () => {
   })
   it('deelt niet door nul', () => {
     expect(returningLine(0, 0)).toBe('0% van de gebruikers kwam terug (0 van 0)')
+  })
+})
+
+describe('cohortCells', () => {
+  it('rekent per week het aandeel van het cohort uit', () => {
+    const cells = cohortCells({ week_start: '2026-08-03', size: 50, weeks: [20, 12, 5, 4] })
+    expect(cells.map((c) => c?.pct)).toEqual([40, 24, 10, 8])
+    expect(cells[0]?.users).toBe(20)
+  })
+
+  it('laat een week die nog niet voorbij is leeg', () => {
+    const cells = cohortCells({ week_start: '2026-09-07', size: 30, weeks: [9, null, null, null] })
+    expect(cells[0]?.pct).toBe(30)
+    expect(cells[1]).toBeNull()
+    expect(cells[3]).toBeNull()
+  })
+
+  it('leest nul actieve gebruikers als 0% en niet als leeg', () => {
+    const cells = cohortCells({ week_start: '2026-07-06', size: 40, weeks: [0, 0, 1, 0] })
+    expect(cells[0]).toEqual({ users: 0, pct: 0 })
+    expect(cells[2]?.pct).toBe(3)
+  })
+
+  it('deelt niet door nul bij een leeg cohort', () => {
+    const cells = cohortCells({ week_start: '2026-07-06', size: 0, weeks: [0, 0, 0, 0] })
+    expect(cells.every((c) => c?.pct === 0)).toBe(true)
+  })
+
+  it('vult aan tot vier weken als de RPC er minder teruggaf', () => {
+    expect(cohortCells({ week_start: '2026-09-07', size: 10, weeks: [3] })).toHaveLength(4)
+  })
+})
+
+describe('installRate', () => {
+  it('meet installaties als aandeel van wie de uitnodiging zag', () => {
+    expect(installRate({ variant: 'A', shown: 200, dismissed: 60, ios_help: 90, installed: 30 })).toBe(15)
+  })
+
+  it('geeft 0 zonder vertoningen, in plaats van te delen door nul', () => {
+    expect(installRate({ variant: 'B', shown: 0, dismissed: 0, ios_help: 0, installed: 0 })).toBe(0)
+  })
+})
+
+describe('cohortShade', () => {
+  it('wordt voller naarmate de retentie hoger is', () => {
+    expect(cohortShade(0)).toContain('slate')
+    expect(cohortShade(5)).not.toBe(cohortShade(0))
+    expect(cohortShade(50)).toContain('bg-brand')
   })
 })
