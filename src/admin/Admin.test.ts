@@ -4,6 +4,7 @@ import {
   cohortCells,
   dealFunnel,
   returnLift,
+  routingHealth,
   versionSplit,
   cohortShade,
   installRate,
@@ -484,5 +485,45 @@ describe('claimRate', () => {
 
   it('deelt niet door nul', () => {
     expect(claimRate({ value: 'vol', seen: 0, claimed: 0 })).toBeNull()
+  })
+})
+
+describe('routingHealth', () => {
+  const blok = (hits: number, ors: number, estimates: number, limit = 2000) => ({
+    limit, today: { hits, ors, estimates }, cached_routes: 0, days: [],
+  })
+
+  it('rekent verbruik en rest uit tegen de daglimiet', () => {
+    const r = routingHealth(blok(400, 500, 0))
+    expect(r.used).toBe(500)
+    expect(r.left).toBe(1500)
+    expect(r.pctUsed).toBe(25)
+  })
+
+  it('rekent de cache-hit-rate over alles wat gevraagd is', () => {
+    // 800 uit de cache, 200 opgehaald: 80 procent.
+    expect(routingHealth(blok(800, 200, 0)).hitRate).toBe(80)
+    expect(routingHealth(blok(0, 100, 0)).hitRate).toBe(0)
+  })
+
+  it('telt schattingen mee in de noemer, want ook die waren een vraag', () => {
+    expect(routingHealth(blok(50, 25, 25)).hitRate).toBe(50)
+  })
+
+  it('geeft geen hit-rate als er niets gevraagd is', () => {
+    // Nul tonen zou "slecht" suggereren terwijl er simpelweg niets gebeurde.
+    expect(routingHealth(blok(0, 0, 0)).hitRate).toBeNull()
+  })
+
+  it('laat het percentage niet boven de honderd uitkomen', () => {
+    expect(routingHealth(blok(0, 2500, 0)).pctUsed).toBe(100)
+    expect(routingHealth(blok(0, 2500, 0)).left).toBe(0)
+  })
+
+  it('valt niet om zonder data', () => {
+    const r = routingHealth(undefined)
+    expect(r.used).toBe(0)
+    expect(r.left).toBe(2000)
+    expect(r.hitRate).toBeNull()
   })
 })

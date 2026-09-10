@@ -74,6 +74,37 @@ export interface Strings {
   themeDark: string
   stopNames: Record<StopId, string>
   lastUpdated: string
+  planner: {
+    title: string
+    fromLabel: string
+    fromPlaceholder: string
+    toLabel: string
+    toPlaceholder: string
+    whenLabel: string
+    clearTime: string
+    modeLabel: string
+    bike: string
+    walk: string
+    myLocation: string
+    needFields: string
+    leaveBy: string
+    arriveAt: string
+    viaStop: string
+    thenMin: string
+    lastFerry: string
+    best: string
+    estimated: string
+    disrupted: string
+    noFerryRoute: string
+    noFerryTonight: string
+    firstTomorrow: string
+    metroHint: string
+    noOptions: string
+    reminder: string
+    reminderOff: string
+    leaveNow: string
+    reminderBodyDirect: string
+  }
   deals: {
     badge: string
     teaser: string
@@ -179,6 +210,37 @@ export const STRINGS: Record<Lang, Strings> = {
       pontsteiger: 'Pontsteiger',
     },
     lastUpdated: 'Dienstregeling bijgewerkt',
+    planner: {
+      title: 'Op tijd aankomen',
+      fromLabel: 'Waar ben je',
+      fromPlaceholder: 'Adres of plek typen',
+      toLabel: 'Waar moet je heen',
+      toPlaceholder: 'Adres of plek typen',
+      whenLabel: 'Aankomsttijd',
+      clearTime: 'of gewoon nu',
+      modeLabel: 'Naar de steiger',
+      bike: 'Fiets',
+      walk: 'Lopen',
+      myLocation: 'Mijn locatie',
+      needFields: 'Kies waar je bent en waar je heen moet.',
+      leaveBy: 'Vertrek uiterlijk',
+      arriveAt: 'aan om',
+      viaStop: '{min} min naar {stop}',
+      thenMin: 'dan {min} min',
+      lastFerry: 'laatste pont',
+      best: 'snelste',
+      estimated: 'Reistijden zijn geschat; de routeringsdienst was even niet bereikbaar.',
+      disrupted: 'vaart niet, die route laten we weg.',
+      noFerryRoute: 'Zonder pont, aan deze kant van het IJ',
+      noFerryTonight: 'Geen pont meer vanavond.',
+      firstTomorrow: 'Eerste morgen',
+      metroHint: 'Naar Noord kan de metro nog; die rijdt langer door.',
+      noOptions: 'Hier kom ik niet uit. Probeer een andere tijd of plek.',
+      reminder: 'Herinner me',
+      reminderOff: 'Herinnering uit',
+      leaveNow: 'Vertrek nu naar',
+      reminderBodyDirect: 'Zonder pont',
+    },
     deals: {
       badge: 'Pontdeal',
       teaser: 'Volgende Pontdeal: maandag',
@@ -282,6 +344,37 @@ export const STRINGS: Record<Lang, Strings> = {
       pontsteiger: 'Pontsteiger',
     },
     lastUpdated: 'Timetable updated',
+    planner: {
+      title: 'Arrive on time',
+      fromLabel: 'Where are you',
+      fromPlaceholder: 'Type an address or place',
+      toLabel: 'Where to',
+      toPlaceholder: 'Type an address or place',
+      whenLabel: 'Arrival time',
+      clearTime: 'or just now',
+      modeLabel: 'To the ferry stop',
+      bike: 'Bike',
+      walk: 'Walk',
+      myLocation: 'My location',
+      needFields: 'Pick where you are and where you are going.',
+      leaveBy: 'Leave by',
+      arriveAt: 'arrive',
+      viaStop: '{min} min to {stop}',
+      thenMin: 'then {min} min',
+      lastFerry: 'last ferry',
+      best: 'fastest',
+      estimated: 'Travel times are estimated; the routing service was unreachable.',
+      disrupted: 'is not sailing, so that route is left out.',
+      noFerryRoute: 'No ferry needed, same side of the IJ',
+      noFerryTonight: 'No ferry left tonight.',
+      firstTomorrow: 'First one tomorrow',
+      metroHint: 'The metro to Noord runs later than the ferries.',
+      noOptions: 'I cannot work this one out. Try another time or place.',
+      reminder: 'Remind me',
+      reminderOff: 'Reminder off',
+      leaveNow: 'Leave now for',
+      reminderBodyDirect: 'No ferry needed',
+    },
     deals: {
       badge: 'Ferry deal',
       teaser: 'Next ferry deal: Monday',

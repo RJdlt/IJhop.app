@@ -66,6 +66,9 @@ interface Dash {
   deals?: DealsBlock
   /** Welke appversie draaien de toestellen (migratie 0023). */
   versions?: VersionRow[]
+  /** De aankomstplanner en het verbruik van de routeringsdienst (0026). */
+  planner?: PlannerBlock
+  routing?: RoutingBlock
   hourly: number[]
   dow: number[]
   ferries: PropRow[]
@@ -111,6 +114,22 @@ export interface DealsBlock {
   return: DealReturn
 }
 /** Eén appversie in het venster. `first_seen` bepaalt welke de nieuwste is. */
+export interface PlannerDay { day: string; opened: number; results: number; fallbacks: number; reminders_set: number }
+export interface PlannerBlock {
+  daily: PlannerDay[]
+  opened: number
+  results: number
+  reminders_set: number
+  reminders_sent: number
+  reminders_failed: number
+  reminders_open: number
+}
+export interface RoutingBlock {
+  limit: number
+  today: { hits: number; ors: number; estimates: number }
+  cached_routes: number
+  days: { day: string; hits: number; ors: number; estimates: number }[]
+}
 export interface VersionRow {
   version: string
   users: number
@@ -294,6 +313,16 @@ function SplitLijst({
           )
         })}
       </div>
+    </div>
+  )
+}
+
+/** Eén groot cijfer met een label eronder. */
+function Cijfer({ label, waarde }: { label: string; waarde: number }) {
+  return (
+    <div className="rounded-xl bg-slate-50 px-2 py-3">
+      <p className="text-2xl font-bold tabular-nums text-slate-900">{nf(waarde)}</p>
+      <p className="mt-0.5 text-[11px] leading-tight text-slate-500">{label}</p>
     </div>
   )
 }
@@ -498,6 +527,22 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
       { variant: 'B', shown: 380, dismissed: 190, ios_help: 150, installed: 42 },
     ],
     cohorts: demoCohorts,
+    planner: {
+      daily: daily.slice(-14).map((d, i) => ({
+        day: d.day, opened: 8 + (i % 5) * 3, results: 6 + (i % 4) * 3,
+        fallbacks: i % 7 === 0 ? 2 : 0, reminders_set: i % 3,
+      })),
+      opened: 96, results: 74, reminders_set: 21,
+      reminders_sent: 18, reminders_failed: 1, reminders_open: 2,
+    },
+    routing: {
+      limit: 2000,
+      today: { hits: 412, ors: 63, estimates: 4 },
+      cached_routes: 288,
+      days: daily.slice(-14).map((d, i) => ({
+        day: d.day, hits: 200 + i * 30, ors: Math.max(5, 180 - i * 12), estimates: i % 5,
+      })),
+    },
     versions: [
       { version: '4f2a1c9', users: 402, sessions: 610, first_seen: new Date(Date.now() - 2 * 86400000).toISOString(), last_seen: new Date().toISOString() },
       { version: '9b31d02', users: 61, sessions: 74, first_seen: new Date(Date.now() - 9 * 86400000).toISOString(), last_seen: new Date(Date.now() - 3600000).toISOString() },
@@ -630,6 +675,34 @@ export function versionSplit(rows: VersionRow[] | undefined): {
     oldUsers,
     pctOld: totaal > 0 ? Math.round((oldUsers / totaal) * 100) : 0,
     rows: gemarkeerd,
+  }
+}
+
+/**
+ * Hoe vol zit de emmer van de routeringsdienst?
+ *
+ * OpenRouteService geeft 2.000 verzoeken per dag op de gratis laag. De
+ * hit-rate zegt of de cache zijn werk doet: alles wat daaruit komt kost niets.
+ * `pctUsed` is het cijfer waarop je moet letten voordat de planner op een
+ * woensdagavond alleen nog schattingen geeft.
+ */
+export function routingHealth(r: RoutingBlock | undefined): {
+  used: number
+  left: number
+  pctUsed: number
+  hitRate: number | null
+  totaal: number
+} {
+  const limit = r?.limit && r.limit > 0 ? r.limit : 2000
+  const t = r?.today ?? { hits: 0, ors: 0, estimates: 0 }
+  const totaal = t.hits + t.ors + t.estimates
+  return {
+    used: t.ors,
+    left: Math.max(0, limit - t.ors),
+    pctUsed: Math.min(100, Math.round((t.ors / limit) * 100)),
+    // Zonder verzoeken is er geen hit-rate; nul tonen zou "slecht" suggereren.
+    hitRate: totaal > 0 ? Math.round((t.hits / totaal) * 100) : null,
+    totaal,
   }
 }
 
@@ -1103,6 +1176,8 @@ export function Admin() {
   const install = dash?.install ?? []
   const dealBlok = dash?.deals ?? null
   const versies = versionSplit(dash?.versions)
+  const planner = dash?.planner ?? null
+  const ors = routingHealth(dash?.routing)
   const dealRetour = returnLift(dealBlok?.return)
   const cohorts = dash?.cohorts ?? []
   const weekly = dash?.weekly ?? []
@@ -1290,6 +1365,110 @@ export function Admin() {
                   <p className="text-[11px] text-slate-400">Stappen zijn genest: elke stap is een subset van de vorige.</p>
                 </div>
               </Gate>
+            </Panel>
+            <Panel title="Planner" emoji="🧭" sub="aankomstplanner, per gebruiker">
+              {!planner || planner.opened === 0 ? (
+                <Empty text="Nog niemand heeft de planner opengeklapt." />
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <Cijfer label="opengeklapt" waarde={planner.opened} />
+                    <Cijfer label="kregen een route" waarde={planner.results} />
+                    <Cijfer label="zetten een herinnering" waarde={planner.reminders_set} />
+                  </div>
+                  <p className="text-sm text-slate-700">
+                    <strong className="tabular-nums">{nf(planner.reminders_sent)}</strong>{' '}
+                    herinneringen daadwerkelijk verstuurd
+                    <span className="text-slate-400">
+                      {' '}
+                      · {nf(planner.reminders_open)} staan klaar
+                      {planner.reminders_failed > 0 && ` · ${nf(planner.reminders_failed)} mislukt`}
+                    </span>
+                  </p>
+                  {planner.daily.length > 1 && (
+                    <Columns
+                      data={planner.daily.map((d) => ({
+                        label: d.day.slice(8),
+                        value: d.opened,
+                        title: `${d.day}: ${nf(d.opened)} keer open, ${nf(d.results)} routes`,
+                      }))}
+                      color="bg-sky-500"
+                      labelEvery={3}
+                    />
+                  )}
+                  <p className="text-[11px] leading-relaxed text-slate-400">
+                    Verstuurd komt uit de tabel en niet uit een event: alleen daar staat wat de
+                    server echt de deur uit deed.
+                  </p>
+                </div>
+              )}
+            </Panel>
+            <Panel title="Routeringsdienst" emoji="🚴" sub="OpenRouteService, gratis laag">
+              <div className="flex flex-col gap-3">
+                <div>
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="font-semibold text-slate-700">Vandaag opgevraagd</span>
+                    <span className="tabular-nums text-slate-500">
+                      {nf(ors.used)} van {nf(dash?.routing?.limit ?? 2000)}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-3 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className={`h-full rounded-full ${
+                        ors.pctUsed >= 80 ? 'bg-rose-500' : ors.pctUsed >= 50 ? 'bg-amber-500' : 'bg-brand'
+                      }`}
+                      style={{ width: `${Math.max(1, ors.pctUsed)}%` }}
+                    />
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {ors.pctUsed}% op · nog {nf(ors.left)} te gaan vandaag
+                  </p>
+                </div>
+
+                <p className="text-sm text-slate-700">
+                  {ors.hitRate == null ? (
+                    <span className="text-slate-400">Vandaag nog niets opgevraagd.</span>
+                  ) : (
+                    <>
+                      <strong className="tabular-nums">{ors.hitRate}%</strong> uit de cache
+                      <span className="text-slate-400">
+                        {' '}
+                        ({nf(dash?.routing?.today.hits ?? 0)} van {nf(ors.totaal)})
+                      </span>
+                    </>
+                  )}
+                </p>
+
+                {(dash?.routing?.today.estimates ?? 0) > 0 && (
+                  <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+                    {nf(dash?.routing?.today.estimates ?? 0)} keer moest de planner schatten. Dat
+                    gebeurt als de emmer leeg is of de dienst niet antwoordde.
+                  </p>
+                )}
+
+                {(dash?.routing?.days.length ?? 0) > 1 && (
+                  <div>
+                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                      Verzoeken per dag (veertien dagen)
+                    </p>
+                    <Columns
+                      data={(dash?.routing?.days ?? []).map((d) => ({
+                        label: d.day.slice(8),
+                        value: d.ors,
+                        title: `${d.day}: ${nf(d.ors)} opgevraagd, ${nf(d.hits)} uit cache`,
+                      }))}
+                      color="bg-violet-500"
+                      labelEvery={3}
+                    />
+                  </div>
+                )}
+
+                <p className="text-[11px] text-slate-400">
+                  {nf(dash?.routing?.cached_routes ?? 0)} trajecten in de cache. Die gaat zeven
+                  dagen mee; de steigerparen zijn eindig, dus de hit-rate hoort met de dag te
+                  stijgen.
+                </p>
+              </div>
             </Panel>
             <Panel title="Appversies" emoji="🔄" sub="unieke gebruikers per versie">
               {versies.rows.length === 0 ? (

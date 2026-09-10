@@ -5,6 +5,7 @@ import { formatDistance, pierDistances, travelSeconds, type TravelMode } from '.
 import { CONNECTIONS, firstCatchable, LINES, STOPS } from '../lib/schedule'
 import { relativeLabel } from '../lib/format'
 import { CheckIcon, LocationIcon } from './icons'
+import { ArrivalPlanner } from './ArrivalPlanner'
 
 const MODE_KEY = 'ijhop:travelmode'
 const MODES: TravelMode[] = ['lopen', 'fiets', 'scooter']
@@ -143,6 +144,7 @@ export function CatchPanel({ nowSecondOfWeek }: CatchPanelProps) {
           </ul>
         </div>
       )}
+      <ArrivalPlanner mijnLocatie={geo.coords ?? null} />
     </section>
   )
 }
