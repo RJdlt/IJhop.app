@@ -5,6 +5,10 @@
  * plain ESM. Wordt aangeroepen door pg_cron in Supabase; zie het blok
  * onderaan 0026_planner.sql voor het commando.
  *
+ * De secret mag in de Authorization-header (`Bearer <CRON_SECRET>`) of als
+ * `?secret=`. De header heeft de voorkeur: een URL met een secret erin komt
+ * in logs terecht, in `cron.job_run_details` en in alles wat ertussen zit.
+ *
  * Wat er verstuurd is staat in de tabel, niet in een analytics-event. Een
  * event uit de app zegt alleen dat iemand op een knop drukte; deze regel zegt
  * dat er echt een melding de deur uit ging.
@@ -34,7 +38,13 @@ async function rest(path, init = {}) {
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
   try {
-    const secret = typeof req.query?.secret === 'string' ? req.query.secret : ''
+    // De secret komt bij voorkeur uit de Authorization-header: een URL belandt
+    // in serverlogs, in de geschiedenis van pg_cron en in elke proxy ertussen,
+    // een header veel minder. De query-variant blijft werken omdat push-check
+    // die al gebruikt en beide via dezelfde CRON_SECRET lopen.
+    const uitHeader = String(req.headers?.authorization ?? '').replace(/^Bearer\s+/i, '')
+    const uitQuery = typeof req.query?.secret === 'string' ? req.query.secret : ''
+    const secret = uitHeader || uitQuery
     if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
       res.status(401).json({ ok: false })
       return

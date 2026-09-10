@@ -575,26 +575,34 @@ grant execute on function public.analytics_dashboard(int, boolean) to authentica
 --
 -- De cron staat niet in dit bestand omdat er een secret in moet, en dat hoort
 -- niet in git. Draai het onderstaande apart in de SQL-editor, met jouw eigen
--- CRON_SECRET (dezelfde die al in Vercel staat voor push-check) op de plek van
--- VUL_HIER_IN:
+-- CRON_SECRET (dezelfde die in Vercel staat) op de plek van <<CRON_SECRET>>.
 --
---   create extension if not exists pg_cron;
+-- pg_cron plant alleen SQL en kan zelf geen HTTP; het aanroepen van onze
+-- endpoint gaat via pg_net. Vandaar allebei de extensies.
+--
 --   create extension if not exists pg_net;
+--   create extension if not exists pg_cron;
 --
 --   select cron.schedule(
 --     'ijhop-herinneringen',
 --     '* * * * *',
 --     $cron$
 --       select net.http_get(
---         url := 'https://ijhop.app/api/reminder-check?secret=VUL_HIER_IN',
+--         url := 'https://ijhop.app/api/reminder-check',
+--         headers := jsonb_build_object('Authorization', 'Bearer <<CRON_SECRET>>'),
 --         timeout_milliseconds := 20000
 --       );
 --     $cron$
 --   );
 --
+-- De secret gaat in de Authorization-header en niet in de URL: een URL met een
+-- secret erin komt in cron.job_run_details te staan en in elke log ertussen.
+--
 -- Controleren of hij loopt:
 --   select jobname, schedule, active from cron.job;
---   select * from cron.job_run_details order by start_time desc limit 10;
+--   select status, return_message, start_time
+--     from cron.job_run_details order by start_time desc limit 10;
 --
--- Weghalen:
+-- Weghalen of opnieuw zetten (unschedule eerst; schedule met dezelfde naam
+-- vervangt niet, die maakt een tweede job):
 --   select cron.unschedule('ijhop-herinneringen');
