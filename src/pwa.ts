@@ -6,10 +6,19 @@
  * die naar de aftelklok staat te kijken wil niet dat het scherm midden in een
  * telling wit wordt.
  *
- * Daarom staat de service worker op 'prompt' (zie vite.config.ts): de nieuwe
- * worker installeert zichzelf en blijft dan wachten. Wij zoeken hem op bij het
- * openen, bij terugkeer naar de voorgrond en periodiek, tonen een balkje, en
- * pas als de bezoeker daarop tikt zetten we hem aan en herladen we één keer.
+ * Daarom staat de registratie op 'prompt' (zie vite.config.ts): de browser
+ * herlaadt nooit uit zichzelf. Wij zoeken de nieuwe worker op bij het openen,
+ * bij terugkeer naar de voorgrond en periodiek, tonen een balkje, en pas als
+ * de bezoeker daarop tikt herladen we één keer.
+ *
+ * De nieuwe worker wordt wél meteen actief (skipWaiting), maar neemt open
+ * pagina's niet over (geen clientsClaim). Dat klinkt omslachtig en is het
+ * niet: een worker die blijft wachten wordt pas actief als álle vensters van
+ * de app dicht zijn geweest, en een geïnstalleerde PWA gaat soms weken niet
+ * dicht. Getest en gezien: dan blijft zo'n toestel op de oude versie staan,
+ * ook nadat de bezoeker op "Vernieuwen" tikt, want een gewone herlaad maakt
+ * een wachtende worker niet actief. Zo blijft de lopende pagina op zijn eigen
+ * bestanden draaien tot hij zelf herlaadt.
  *
  * Waarom actief zoeken en niet afwachten: iOS houdt een geïnstalleerde PWA
  * hardnekkig vast. Zonder eigen `update()`-aanroep kan een toestel dagen op
@@ -39,8 +48,13 @@ export function isStale(lastCheck: number | null, now: number, maxAge = MAX_STAL
  * Wachten er nieuwe bestanden op de bezoeker?
  *
  * Alleen als er al een worker de baas was: bij de allereerste installatie
- * "wacht" er ook eentje, maar dat is geen update en daar hoort geen balkje
- * bij. Los van de browser-API's zodat het te testen is.
+ * staat er ook eentje klaar, maar dat is geen update en daar hoort geen
+ * balkje bij. Los van de browser-API's zodat het te testen is.
+ *
+ * In de praktijk is dit het vangnet: doordat de nieuwe worker meteen actief
+ * wordt, komt de melding meestal via `updatefound` binnen en niet hierlangs.
+ * Blijft er toch eentje hangen (een andere tab houdt de oude vast), dan zien
+ * we hem alsnog.
  */
 export function updateIsWaiting(
   reg: { waiting: unknown | null; installing?: { state?: string } | null },
@@ -94,11 +108,13 @@ export function setupPwaAutoUpdate(onUpdate: (apply: () => void) => void): void 
       const apply = () => {
         const wachtend = reg.waiting
         if (!wachtend) {
-          // Niets aan het wachten (bijvoorbeeld al overgenomen): gewoon
-          // herladen, dan heeft de bezoeker alsnog wat hij vroeg.
+          // Het gewone geval: de nieuwe worker is al actief en een herlaad
+          // haalt meteen de nieuwe bestanden op.
           window.location.reload()
           return
         }
+        // Er hangt er toch eentje in de wachtstand. Laat hem los en herlaad
+        // zodra hij het overneemt.
         herladen = true
         wachtend.postMessage({ type: 'SKIP_WAITING' })
       }

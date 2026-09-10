@@ -35,11 +35,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // 'prompt' en niet 'autoUpdate'. Met autoUpdate roept de nieuwe worker
-      // meteen skipWaiting() en clientsClaim() aan: die neemt het dan over
-      // terwijl de pagina nog de oude code draait, en wisselt de gecachete
-      // bestanden onder een lopende aftelling vandaan. Nu blijft de nieuwe
-      // versie netjes wachten tot de bezoeker op "Vernieuwen" tikt.
+      // 'prompt' en niet 'autoUpdate': wij bepalen wanneer er herladen wordt,
+      // niet de browser. Zie de workbox-instellingen hieronder voor de reden
+      // dat skipWaiting toch aan staat.
       registerType: 'prompt',
       // The web app manifest is maintained by hand in public/manifest.json and
       // linked from index.html, so the plugin should not generate its own.
@@ -54,8 +52,24 @@ export default defineConfig({
       workbox: {
         // The whole timetable ships with the app, so the core works fully offline.
         globPatterns: ['**/*.{js,css,html,svg,png,json,woff2}'],
-        // De bezoeker bepaalt het moment; zie hierboven.
-        skipWaiting: false,
+        // Deze twee horen bij elkaar en de combinatie is met opzet zo.
+        //
+        // skipWaiting AAN: de nieuwe worker blijft niet in de wachtstand
+        // hangen. Dat klinkt tegenstrijdig, maar een wachtende worker wordt
+        // pas actief als álle vensters van de app dicht zijn geweest, en een
+        // geïnstalleerde PWA op een telefoon gaat soms weken niet dicht.
+        // Getest: met skipWaiting uit bleef zo'n toestel op de oude versie,
+        // ook nadat de bezoeker op "Vernieuwen" tikte, want een gewone
+        // herlaad maakt een wachtende worker niet actief.
+        //
+        // clientsClaim UIT: de nieuwe worker neemt geen open pagina's over.
+        // Wie op dat moment naar de aftelklok kijkt houdt zijn eigen worker
+        // en zijn eigen bestanden tot hij zelf herlaadt. Er wisselt dus
+        // niets onder een lopende telling vandaan.
+        //
+        // Samen: de nieuwe versie staat klaar, de app zegt dat met een balkje,
+        // en pas bij een tik (of de volgende keer openen) stap je over.
+        skipWaiting: true,
         clientsClaim: false,
         // Ruim de precache van vorige versies op zodra de nieuwe het overneemt,
         // anders blijft er per build een set bestanden liggen.
