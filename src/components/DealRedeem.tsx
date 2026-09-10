@@ -24,9 +24,11 @@ interface DealRedeemProps {
   deal: Deal
   code: MyCode
   onClose: () => void
+  /** Voorvertoning voor een admin: wel tonen, niet meten. */
+  preview?: boolean
 }
 
-export function DealRedeem({ deal, code, onClose }: DealRedeemProps) {
+export function DealRedeem({ deal, code, onClose, preview = false }: DealRedeemProps) {
   const { t } = useI18n()
   const ios = isIOS()
   const url = useMemo(() => redeemUrl(deal.partner.slug, code.code), [deal.partner.slug, code.code])
@@ -35,8 +37,8 @@ export function DealRedeem({ deal, code, onClose }: DealRedeemProps) {
   const ingewisseld = code.redeemed_at != null
 
   useEffect(() => {
-    track('deal_code_shown', { deal_id: deal.id, redeemed: ingewisseld })
-  }, [deal.id, ingewisseld])
+    if (!preview) track('deal_code_shown', { deal_id: deal.id, redeemed: ingewisseld })
+  }, [deal.id, ingewisseld, preview])
 
   // Terug met de escape-toets, en met de terugknop van de telefoon.
   useEffect(() => {
@@ -55,6 +57,7 @@ export function DealRedeem({ deal, code, onClose }: DealRedeemProps) {
       <div className="mx-auto flex min-h-full w-full max-w-md flex-col gap-4 px-4 py-6">
         <header className="flex items-baseline justify-between gap-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {preview ? `${t.deals.previewTitle} · ` : ''}
             {t.deals.badge} · {deal.partner.name}
           </p>
           <button
@@ -78,7 +81,7 @@ export function DealRedeem({ deal, code, onClose }: DealRedeemProps) {
         ) : (
           <section className="card px-5 py-6 text-center">
             <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-              {t.deals.yourCode} · {t.deals.savedInApp}
+              {preview ? t.deals.previewCode : `${t.deals.yourCode} · ${t.deals.savedInApp}`}
             </p>
 
             {/* De code zelf. Groot, met ruimte tussen de tekens, en voor een
@@ -115,17 +118,23 @@ export function DealRedeem({ deal, code, onClose }: DealRedeemProps) {
           href={mapsUrl(deal.partner, ios)}
           target="_blank"
           rel="noreferrer"
-          onClick={() => track('deal_route', { deal_id: deal.id })}
+          onClick={() => !preview && track('deal_route', { deal_id: deal.id })}
           className="rounded-2xl bg-slate-900 px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
         >
           {t.deals.route}
         </a>
 
-        <p className="text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-          {t.deals.howTo}
-          <br />
-          {t.deals.offlineNote}
-        </p>
+        {preview ? (
+          <p className="rounded-xl bg-amber-100 px-3 py-2 text-center text-xs leading-relaxed text-amber-900">
+            {t.deals.previewNote} De kassa neemt deze code aan en meldt erbij dat het een testcode is.
+          </p>
+        ) : (
+          <p className="text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            {t.deals.howTo}
+            <br />
+            {t.deals.offlineNote}
+          </p>
+        )}
       </div>
     </div>
   )

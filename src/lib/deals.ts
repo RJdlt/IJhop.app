@@ -44,6 +44,8 @@ export interface NextDeal {
 export interface MyCode {
   code: string
   redeemed_at: string | null
+  /** Een testcode uit de adminpreview. Telt nergens mee. */
+  preview?: boolean
 }
 
 export interface Pontdeal {
@@ -51,6 +53,26 @@ export interface Pontdeal {
   next: NextDeal | null
   redeemed_week: number
   my_code: MyCode | null
+  /** Kijkt hier een admin naar een voorvertoning? Alleen de database bepaalt
+   *  dit; de app mag het nooit zelf aanzetten. */
+  preview?: boolean
+}
+
+/**
+ * Leest `?preview=deal:<id>` uit een URL.
+ *
+ * Geeft alleen het id terug, geen toestemming: of je dit mag zien beslist de
+ * database in `admin_preview_deal()`. Deze functie is dus met opzet dom.
+ */
+export function previewDealId(search: string): string | null {
+  try {
+    const waarde = new URLSearchParams(search).get('preview')
+    if (!waarde) return null
+    const m = /^deal:([0-9a-f-]{36})$/i.exec(waarde.trim())
+    return m ? m[1] : null
+  } catch {
+    return null
+  }
 }
 
 /** Vanaf hoeveel inwisselingen we het aantal laten zien. Daaronder is het geen
@@ -102,6 +124,43 @@ export function formatDealCountdown(seconds: number, lang: 'nl' | 'en' = 'nl'): 
 }
 
 // ---- Ophalen ----------------------------------------------------------------
+
+/**
+ * De voorvertoning van één deal, voor een admin.
+ *
+ * Mislukt dit, om welke reden dan ook, dan geven we null terug en gaat de app
+ * gewoon verder alsof er geen preview gevraagd was. Een bezoeker die deze URL
+ * doorgestuurd krijgt hoort niets bijzonders te zien, ook geen foutmelding:
+ * dat zou al verklappen dat er iets te zien valt.
+ */
+export async function fetchPreviewDeal(dealId: string): Promise<Pontdeal | null> {
+  const client = supabase
+  if (!client) return null
+  try {
+    const { data, error } = await client.rpc('admin_preview_deal', { p_deal: dealId })
+    if (error || !data) return null
+    return data as Pontdeal
+  } catch {
+    return null
+  }
+}
+
+/** Testcode pakken in de preview. Ook dit weigert de database voor niet-admins. */
+export async function claimPreviewCode(dealId: string): Promise<MyCode | null> {
+  const client = supabase
+  if (!client) return null
+  try {
+    const { data, error } = await client.rpc('claim_preview_code', {
+      p_deal: dealId,
+      p_code: makeDealCode(),
+    })
+    if (error || !data) return null
+    const res = data as { code: string; redeemed_at: string | null }
+    return { code: res.code, redeemed_at: res.redeemed_at, preview: true }
+  } catch {
+    return null
+  }
+}
 
 /**
  * Wat er nu te halen valt voor deze steigers. Faalt stil en geeft dan de

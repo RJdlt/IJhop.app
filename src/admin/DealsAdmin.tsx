@@ -35,6 +35,14 @@ interface DealRow {
   status: string
   codes: number
   redeemed: number
+  /** Testcodes uit de preview; die tellen nergens anders mee. */
+  preview_codes?: number
+}
+
+/** De app-URL die deze deal toont alsof het maandag is. Wie hem opent zonder
+ *  admin te zijn ziet gewoon de normale app: de database weigert de preview. */
+export function previewUrl(dealId: string): string {
+  return `/?preview=deal:${dealId}`
 }
 
 /**
@@ -371,6 +379,7 @@ export function DealsAdmin() {
                   <th className="font-semibold">Aanbod</th>
                   <th className="font-semibold">Steiger</th>
                   <th className="font-semibold">Codes</th>
+                  <th className="font-semibold">Test</th>
                   <th className="font-semibold">Status</th>
                   <th />
                 </tr>
@@ -387,6 +396,7 @@ export function DealsAdmin() {
                     <td className="tabular-nums text-slate-600">
                       {d.redeemed} / {d.codes}
                     </td>
+                    <td className="tabular-nums text-slate-400">{d.preview_codes ?? 0}</td>
                     <td>
                       <span
                         className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -401,7 +411,16 @@ export function DealsAdmin() {
                       </span>
                     </td>
                     <td className="whitespace-nowrap text-right">
-                      <button type="button" onClick={() => bewerk(d)} className="text-xs text-slate-500 underline-offset-2 hover:underline">
+                      <a
+                        href={previewUrl(d.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-semibold text-slate-600 underline-offset-2 hover:underline"
+                        title="Toont deze deal in de app alsof het maandag is. Alleen jij ziet hem."
+                      >
+                        bekijk in app
+                      </a>
+                      <button type="button" onClick={() => bewerk(d)} className="ml-2 text-xs text-slate-500 underline-offset-2 hover:underline">
                         bewerk
                       </button>
                       {d.status !== 'actief' ? (

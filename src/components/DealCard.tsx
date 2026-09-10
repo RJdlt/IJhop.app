@@ -23,9 +23,11 @@ interface DealCardProps {
   redeemedWeek: number
   hasCode: boolean
   onGrab: () => void
+  /** Voorvertoning voor een admin: wel tonen, niet meten. */
+  preview?: boolean
 }
 
-export function DealCard({ deal, next, redeemedWeek, hasCode, onGrab }: DealCardProps) {
+export function DealCard({ deal, next, redeemedWeek, hasCode, onGrab, preview = false }: DealCardProps) {
   const { t, lang } = useI18n()
   const [now, setNow] = useState(() => new Date())
 
@@ -36,9 +38,12 @@ export function DealCard({ deal, next, redeemedWeek, hasCode, onGrab }: DealCard
     return () => clearInterval(timer)
   }, [])
 
+  // In een voorvertoning meten we niets. Een deal die nog niet loopt hoort
+  // geen vertoningen te verzamelen, en al helemaal niet die van de admin die
+  // hem aan het nakijken is.
   useEffect(() => {
-    if (deal) track('deal_seen', { deal_id: deal.id, stop: deal.stop_id })
-  }, [deal])
+    if (deal && !preview) track('deal_seen', { deal_id: deal.id, stop: deal.stop_id })
+  }, [deal, preview])
 
   if (!deal) {
     if (!next) return null
@@ -55,6 +60,11 @@ export function DealCard({ deal, next, redeemedWeek, hasCode, onGrab }: DealCard
 
   return (
     <section className="card animate-dealIn px-5 py-4">
+      {preview && (
+        <p className="mb-3 rounded-xl bg-amber-100 px-3 py-2 text-[11px] font-medium leading-snug text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
+          <strong>{t.deals.previewTitle}</strong> · {t.deals.previewNote}
+        </p>
+      )}
       <div className="flex items-start gap-3">
         <PartnerLogo name={deal.partner.name} url={deal.partner.logo_url} />
         <div className="min-w-0 flex-1">

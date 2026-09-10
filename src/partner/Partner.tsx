@@ -38,8 +38,8 @@ const LOGIN_TEKST: Record<string, string> = {
 }
 
 type Uitslag =
-  | { kind: 'ok'; offer: string; code: string }
-  | { kind: 'used'; offer?: string; at?: string }
+  | { kind: 'ok'; offer: string; code: string; preview?: boolean }
+  | { kind: 'used'; offer?: string; at?: string; preview?: boolean }
   | { kind: 'expired'; offer?: string }
   | { kind: 'unknown' }
   | { kind: 'error'; message: string }
@@ -129,9 +129,16 @@ export function Partner() {
       if (error) {
         setUitslag({ kind: 'error', message: error.message })
       } else {
-        const r = data as { ok: boolean; reason?: string; offer?: string; redeemed_at?: string; code?: string }
+        const r = data as {
+          ok: boolean
+          reason?: string
+          offer?: string
+          redeemed_at?: string
+          code?: string
+          preview?: boolean
+        }
         if (r.ok) {
-          setUitslag({ kind: 'ok', offer: r.offer ?? '', code: r.code ?? code })
+          setUitslag({ kind: 'ok', offer: r.offer ?? '', code: r.code ?? code, preview: r.preview })
           setCode('')
           void laadStats(pin)
         } else if (r.reason === 'pin' || r.reason === 'locked') {
@@ -140,7 +147,7 @@ export function Partner() {
           setLoginFout(LOGIN_TEKST[r.reason])
           setStats(null)
         } else if (r.reason === 'used') {
-          setUitslag({ kind: 'used', offer: r.offer, at: r.redeemed_at })
+          setUitslag({ kind: 'used', offer: r.offer, at: r.redeemed_at, preview: r.preview })
         } else if (r.reason === 'expired') {
           setUitslag({ kind: 'expired', offer: r.offer })
         } else {
@@ -251,14 +258,23 @@ function Uitslagvak({ uitslag }: { uitslag: Uitslag }) {
         <p className="text-3xl" aria-hidden="true">✓</p>
         <p className="mt-1 text-lg font-bold">Ingewisseld</p>
         <p className="text-sm text-white/90">{uitslag.offer}</p>
+        {/* Een testcode uit de adminpreview. Dat zeggen we erbij, anders geeft
+            de kassa straks een pizza weg voor een proefrit. */}
+        {uitslag.preview && (
+          <p className="mt-2 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-semibold">
+            Testcode · een proef, geen klant
+          </p>
+        )}
       </div>
     )
   }
   const tekst =
     uitslag.kind === 'used'
-      ? uitslag.at
-        ? `Deze code is al gebruikt op ${new Date(uitslag.at).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.`
-        : 'Deze code is al gebruikt.'
+      ? `${uitslag.preview ? 'Testcode. ' : ''}${
+          uitslag.at
+            ? `Deze code is al gebruikt op ${new Date(uitslag.at).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.`
+            : 'Deze code is al gebruikt.'
+        }`
       : uitslag.kind === 'expired'
         ? 'Deze deal is verlopen.'
         : uitslag.kind === 'unknown'

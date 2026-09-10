@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { formatDealCountdown, isLive, secondsUntil, shouldOfferTip, SOCIAL_PROOF_MIN } from './deals'
+import {
+  formatDealCountdown,
+  isLive,
+  previewDealId,
+  secondsUntil,
+  shouldOfferTip,
+  SOCIAL_PROOF_MIN,
+} from './deals'
 import { dealWeekWindow } from './time'
 
 const week = dealWeekWindow('2026-09-07')!
@@ -78,5 +85,40 @@ describe('tip een vriend', () => {
 
   it('vraagt niets zonder inwisseling', () => {
     expect(shouldOfferTip(null, false, new Date('2026-09-09T09:00:00Z'))).toBe(false)
+  })
+})
+
+describe('preview uit de URL lezen', () => {
+  const id = '5d756369-05e9-48f7-8cd3-8f7bb5e9fe32'
+
+  it('leest deal:<id>', () => {
+    expect(previewDealId(`?preview=deal:${id}`)).toBe(id)
+    expect(previewDealId(`?foo=1&preview=deal:${id}&bar=2`)).toBe(id)
+  })
+
+  it('werkt zonder vraagteken en met hoofdletters in het id', () => {
+    expect(previewDealId(`preview=deal:${id.toUpperCase()}`)).toBe(id.toUpperCase())
+  })
+
+  it('negeert alles wat er niet uitziet als een deal-id', () => {
+    expect(previewDealId('')).toBeNull()
+    expect(previewDealId('?preview=')).toBeNull()
+    expect(previewDealId('?preview=deal:kaas')).toBeNull()
+    expect(previewDealId('?preview=1')).toBeNull()
+    expect(previewDealId(`?preview=partner:${id}`)).toBeNull()
+    // Geen halve id's, en geen extra rommel erachter.
+    expect(previewDealId(`?preview=deal:${id.slice(0, 20)}`)).toBeNull()
+    expect(previewDealId(`?preview=deal:${id}extra`)).toBeNull()
+  })
+
+  it('laat zich niet verleiden tot iets anders dan een id', () => {
+    // Deze functie geeft nooit toestemming; ze leest alleen. De database
+    // beslist of je de preview krijgt.
+    expect(previewDealId(`?preview=deal:${id}'; drop table deals; --`)).toBeNull()
+    expect(previewDealId('?preview=deal:<script>')).toBeNull()
+  })
+
+  it('valt niet om op een kapotte querystring', () => {
+    expect(previewDealId('?%')).toBeNull()
   })
 })

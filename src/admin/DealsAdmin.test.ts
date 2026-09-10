@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { linesForStop, pinUitkomst } from './DealsAdmin'
+import { linesForStop, pinUitkomst, previewUrl } from './DealsAdmin'
+import { previewDealId } from '../lib/deals'
 import { LINES, LINE_IDS } from '../lib/schedule'
 
 describe('linesForStop', () => {
@@ -68,5 +69,18 @@ describe('pinUitkomst', () => {
     for (const fout of [null, '', 'iets raars', 'not authorized']) {
       expect(pinUitkomst(fout, 'X', 'x').tekst.length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('previewUrl', () => {
+  it('wijst naar de app, niet naar het dashboard', () => {
+    const url = previewUrl('5d756369-05e9-48f7-8cd3-8f7bb5e9fe32')
+    expect(url).toBe('/?preview=deal:5d756369-05e9-48f7-8cd3-8f7bb5e9fe32')
+    expect(url.startsWith('/admin')).toBe(false)
+  })
+
+  it('is wat previewDealId er weer uit haalt', () => {
+    const id = '5d756369-05e9-48f7-8cd3-8f7bb5e9fe32'
+    expect(previewDealId(previewUrl(id).replace('/', ''))).toBe(id)
   })
 })

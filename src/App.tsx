@@ -186,11 +186,18 @@ export default function App() {
     return [...stops]
   }, [watched, favLines])
 
-  const { deal, next: nextDeal, redeemedWeek, code: dealCode, claim } = useDeal(dealStops)
+  const {
+    deal,
+    next: nextDeal,
+    redeemedWeek,
+    code: dealCode,
+    claim,
+    preview: dealPreview,
+  } = useDeal(dealStops)
   const [redeemOpen, setRedeemOpen] = useState(false)
   const grabDeal = async () => {
     if (!deal) return
-    track('deal_claim', { deal_id: deal.id, had_code: dealCode != null })
+    if (!dealPreview) track('deal_claim', { deal_id: deal.id, had_code: dealCode != null })
     const res = dealCode ?? (await claim())
     if (res) setRedeemOpen(true)
   }
@@ -255,6 +262,7 @@ export default function App() {
             redeemedWeek={redeemedWeek}
             hasCode={dealCode != null}
             onGrab={grabDeal}
+            preview={dealPreview}
           />
           <TipFriend redeemedAt={dealCode?.redeemed_at ?? null} />
 
@@ -271,7 +279,12 @@ export default function App() {
       </div>
 
       {redeemOpen && deal && dealCode && (
-        <DealRedeem deal={deal} code={dealCode} onClose={() => setRedeemOpen(false)} />
+        <DealRedeem
+          deal={deal}
+          code={dealCode}
+          onClose={() => setRedeemOpen(false)}
+          preview={dealPreview}
+        />
       )}
 
       {!onboarded && (

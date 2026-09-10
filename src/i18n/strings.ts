@@ -93,6 +93,9 @@ export interface Strings {
     tipFriend: string
     tipShare: string
     offlineNote: string
+    previewTitle: string
+    previewNote: string
+    previewCode: string
   }
   install: {
     line: string
@@ -195,6 +198,9 @@ export const STRINGS: Record<Lang, Strings> = {
       tipFriend: 'Tip een vriend',
       tipShare: 'Elke week een deal voor wie op de pont wacht.',
       offlineNote: 'Je code staat in de app, ook zonder bereik.',
+      previewTitle: 'Preview',
+      previewNote: 'Alleen jij ziet dit. De deal staat nog niet live en niets hiervan telt mee.',
+      previewCode: 'Testcode',
     },
     install: {
       line: 'Zet IJhop op je beginscherm: één tik en je ziet de volgende pont, ook zonder internet.',
@@ -295,6 +301,9 @@ export const STRINGS: Record<Lang, Strings> = {
       tipFriend: 'Tell a friend',
       tipShare: 'A deal every week for anyone waiting for the ferry.',
       offlineNote: 'Your code stays in the app, even without signal.',
+      previewTitle: 'Preview',
+      previewNote: 'Only you can see this. The deal is not live yet and nothing here counts.',
+      previewCode: 'Test code',
     },
     install: {
       line: 'Add IJhop to your home screen: one tap and you see the next ferry, even without internet.',
