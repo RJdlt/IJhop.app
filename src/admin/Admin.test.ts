@@ -10,6 +10,8 @@ import {
   weekLabel,
   findMeasurementGap,
   formatGapRange,
+  classifyNewReturning,
+  returningLine,
 } from './Admin'
 
 /** Bouwt een dagreeks; dagen in `zero` krijgen 0 events (meetgat). */
@@ -227,5 +229,101 @@ describe('findMeasurementGap', () => {
 describe('formatGapRange', () => {
   it('schrijft de periode kort in het Nederlands', () => {
     expect(formatGapRange({ from: '2026-08-04', to: '2026-09-10', days: 38 })).toBe('4 aug – 10 sep')
+  })
+})
+
+// ---- Nieuw vs terugkerend ----------------------------------------------------
+// Deze functie spiegelt wat de RPC server-side doet (migratie 0016) en legt de
+// definitie vast: nieuw = eerste week ooit is deze week, terugkerend = eerder.
+
+describe('classifyNewReturning', () => {
+  const weeks = ['2026-08-03', '2026-08-10', '2026-08-17']
+
+  it('telt een gebruiker als nieuw in de week van zijn eerste event', () => {
+    const rows = classifyNewReturning(
+      [{ user: 'a', week: '2026-08-10' }],
+      { a: '2026-08-10' },
+      weeks,
+    )
+    expect(rows).toEqual([
+      { week_start: '2026-08-03', nieuw: 0, terugkerend: 0 },
+      { week_start: '2026-08-10', nieuw: 1, terugkerend: 0 },
+      { week_start: '2026-08-17', nieuw: 0, terugkerend: 0 },
+    ])
+  })
+
+  it('telt een gebruiker met een eerste event vóór het venster als terugkerend', () => {
+    // Kern van de definitie: het eerste event ligt buiten (vóór) het venster,
+    // dus deze gebruiker is niet nieuw, ook al zien we hem hier voor het eerst.
+    const rows = classifyNewReturning(
+      [{ user: 'a', week: '2026-08-03' }],
+      { a: '2026-06-01' },
+      weeks,
+    )
+    expect(rows[0]).toEqual({ week_start: '2026-08-03', nieuw: 0, terugkerend: 1 })
+  })
+
+  it('laat dezelfde gebruiker in een latere week terugkerend worden', () => {
+    const rows = classifyNewReturning(
+      [
+        { user: 'a', week: '2026-08-03' },
+        { user: 'a', week: '2026-08-17' },
+      ],
+      { a: '2026-08-03' },
+      weeks,
+    )
+    expect(rows[0].nieuw).toBe(1)
+    expect(rows[2].terugkerend).toBe(1)
+  })
+
+  it('telt een gebruiker hooguit één keer per week', () => {
+    const rows = classifyNewReturning(
+      [
+        { user: 'a', week: '2026-08-10' },
+        { user: 'a', week: '2026-08-10' },
+        { user: 'a', week: '2026-08-10' },
+      ],
+      { a: '2026-08-10' },
+      weeks,
+    )
+    expect(rows[1]).toEqual({ week_start: '2026-08-10', nieuw: 1, terugkerend: 0 })
+  })
+
+  it('werkt over de jaargrens heen', () => {
+    // 29 dec 2025 is de maandag van ISO-week 1 van 2026; 5 jan 2026 is week 2.
+    const jaarWeken = ['2025-12-29', '2026-01-05']
+    const rows = classifyNewReturning(
+      [
+        { user: 'oud', week: '2026-01-05' },
+        { user: 'nieuw', week: '2026-01-05' },
+      ],
+      { oud: '2025-12-29', nieuw: '2026-01-05' },
+      jaarWeken,
+    )
+    expect(rows[1]).toEqual({ week_start: '2026-01-05', nieuw: 1, terugkerend: 1 })
+  })
+
+  it('negeert activiteit buiten het venster en houdt lege weken op nul', () => {
+    const rows = classifyNewReturning(
+      [{ user: 'a', week: '2026-07-27' }],
+      { a: '2026-07-27' },
+      weeks,
+    )
+    expect(rows.every((r) => r.nieuw === 0 && r.terugkerend === 0)).toBe(true)
+    expect(rows).toHaveLength(3)
+  })
+
+  it('valt terug op "nieuw" als de eerste week onbekend is', () => {
+    const rows = classifyNewReturning([{ user: 'x', week: '2026-08-03' }], {}, weeks)
+    expect(rows[0]).toEqual({ week_start: '2026-08-03', nieuw: 1, terugkerend: 0 })
+  })
+})
+
+describe('returningLine', () => {
+  it('schrijft percentage en aantallen uit', () => {
+    expect(returningLine(24, 63)).toBe('38% van de gebruikers kwam terug (24 van 63)')
+  })
+  it('deelt niet door nul', () => {
+    expect(returningLine(0, 0)).toBe('0% van de gebruikers kwam terug (0 van 0)')
   })
 })

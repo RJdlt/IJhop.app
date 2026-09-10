@@ -9,6 +9,11 @@ import { supabase, ensureAnonSession } from './supabase'
 
 const SESSION_KEY = 'ijhop:analytics:session'
 
+/** Heartbeat-cadans en -plafond; samen bepalen ze tot hoever we sessieduur
+ *  kunnen meten (30s × 20 = 10 minuten) en hoeveel events dat maximaal kost. */
+export const HEARTBEAT_MS = 30_000
+export const HEARTBEAT_MAX = 20
+
 function sessionId(): string {
   try {
     let s = sessionStorage.getItem(SESSION_KEY)
@@ -63,7 +68,22 @@ export function startAnalytics(): void {
   })
 
   // Heartbeat houdt de sessieduur bij zolang de app zichtbaar is.
-  setInterval(() => {
-    if (document.visibilityState === 'visible') track('heartbeat')
-  }, 60_000)
+  //
+  // Elke 30 seconden in plaats van 60: bij 60s viel iedereen die korter dan
+  // een minuut keek buiten de meting, want dan is `session_start` het enige
+  // tijdstip dat we hebben. Met 30s vangen we die bezoeken wél.
+  //
+  // En begrensd op 10 minuten per sessie: daarvoor tikte een tab die de hele
+  // dag openstond eindeloos door (~1440 events per dag per tab). Voor "hoe
+  // lang kijkt iemand naar de klok" is alles boven 10 minuten toch geen
+  // bruikbaar signaal meer, dus daar stopt de meting.
+  let beats = 0
+  const timer = setInterval(() => {
+    if (document.visibilityState !== 'visible') return
+    if (++beats > HEARTBEAT_MAX) {
+      clearInterval(timer)
+      return
+    }
+    track('heartbeat')
+  }, HEARTBEAT_MS)
 }

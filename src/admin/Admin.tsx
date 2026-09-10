@@ -9,6 +9,7 @@ import { LINES, STOPS } from '../lib/schedule'
 // test-events uitgesloten, dagen zonder events als echte nullen.
 interface Daily { day: string; users: number; sessions: number; events: number }
 interface Weekly { week_start: string; users: number; sessions: number; events: number }
+interface NewRet { week_start: string; nieuw: number; terugkerend: number }
 // `value` komt uit `props->>'key'` (of ->>'view'/'id') op vrije JSONB: als het
 // veld in de events-tabel letterlijk JSON null was (bijv. een gewiste
 // pont-keuze), levert Postgres hier SQL NULL. Dus altijd string | null, nooit
@@ -35,10 +36,25 @@ interface Dash {
     median_session_sec: number
     n_dur_sessions: number
   }
-  window: { days: number; events: number; users: number; sessions: number; all_time?: boolean; start_day?: string }
+  window: {
+    days: number
+    events: number
+    users: number
+    sessions: number
+    all_time?: boolean
+    start_day?: string
+    /** Volgt het gekozen venster (was eerder altijd 7 dagen). */
+    sessions_per_user?: number | null
+    /** Voor de samenvattingsregel van "Nieuw vs terugkerend". */
+    returning_users?: number
+    summary_users?: number
+  }
   daily: Daily[]
   /** Per ISO-week; unieke tellingen komen server-side (niet uit `daily` af te leiden). */
   weekly?: Weekly[]
+  /** Per ISO-week nieuw vs terugkerend; vraagt het eerste event ooit per
+   *  gebruiker, dus ook server-side (migratie 0016). */
+  newret?: NewRet[]
   funnel: { sessions: number; arcade: number; started: number; finished: number }
   hourly: number[]
   dow: number[]
@@ -221,6 +237,47 @@ function Columns({ data, color = 'bg-brand', labelEvery = 1 }: { data: { label: 
     </div>
   )
 }
+/** Gestapelde variant van Columns, zelfde maten en stijl: onder terugkerend
+ *  (diep brand-groen), daarboven nieuw (lichtgroen). Lege weken blijven een
+ *  grijze stub, net als in de andere grafieken. */
+function StackedColumns({ data, labelEvery = 1 }: { data: { label: string; nieuw: number; terugkerend: number; title?: string }[]; labelEvery?: number }) {
+  const max = Math.max(1, ...data.map((d) => d.nieuw + d.terugkerend))
+  if (data.length === 0) return <Empty />
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-[10px] text-slate-400">
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-brand" />terugkerend</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-emerald-300" />nieuw</span>
+        </span>
+        <span className="tabular-nums">max {nf(max)}</span>
+      </div>
+      <div className="flex items-end gap-[3px]" style={{ height: CHART_H }}>
+        {data.map((d, i) => {
+          const total = d.nieuw + d.terugkerend
+          if (total === 0) {
+            return (
+              <div key={i} className="flex h-full flex-1 items-end" title={d.title}>
+                <div className="w-full rounded-t bg-slate-200" style={{ height: 1 }} />
+              </div>
+            )
+          }
+          const h = Math.max(3, Math.round((total / max) * CHART_H))
+          const retH = Math.round((d.terugkerend / total) * h)
+          return (
+            <div key={i} className="flex h-full flex-1 flex-col justify-end" title={d.title}>
+              <div className={`w-full bg-emerald-300 ${d.nieuw > 0 ? 'rounded-t' : ''}`} style={{ height: Math.max(0, h - retH) }} />
+              <div className={`w-full bg-brand ${d.nieuw === 0 ? 'rounded-t' : ''}`} style={{ height: retH }} />
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-1 flex gap-[3px] text-[9px] text-slate-400">
+        {data.map((d, i) => <span key={i} className="flex-1 text-center">{i % labelEvery === 0 ? d.label : ''}</span>)}
+      </div>
+    </div>
+  )
+}
 function SkeletonBody() {
   return (
     <>
@@ -257,6 +314,28 @@ function demoWeekly(daily: Daily[]): Weekly[] {
 }
 
 
+/** Demo-variant van de nieuw/terugkerend-reeks: verzint activiteit per week en
+ *  laat `classifyNewReturning` (dezelfde regels als de RPC) het werk doen. */
+function demoNewRet(weeks: Weekly[]): { rows: NewRet[]; returning: number; total: number } {
+  const weekKeys = weeks.map((w) => w.week_start)
+  const activity: Activity[] = []
+  const firstWeek: Record<string, string> = {}
+  weeks.forEach((w, wi) => {
+    for (let u = 0; u < w.users; u++) {
+      // Grofweg twee op de vijf actieve gebruikers is er al eens eerder geweest.
+      const veteran = wi > 0 && u % 5 < 2
+      const id = veteran ? `oud-${(u + wi) % 40}` : `nieuw-${wi}-${u}`
+      if (!(id in firstWeek)) {
+        firstWeek[id] = veteran ? weekKeys[Math.max(0, wi - 1 - (u % 3))] : w.week_start
+      }
+      activity.push({ user: id, week: w.week_start })
+    }
+  })
+  const rows = classifyNewReturning(activity, firstWeek, weekKeys)
+  const returners = new Set(activity.filter((a) => (firstWeek[a.user] ?? a.week) < a.week).map((a) => a.user))
+  return { rows, returning: returners.size, total: new Set(activity.map((a) => a.user)).size }
+}
+
 function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: EntryRow[] } {
   const rnd = (a: number, b: number) => Math.floor(a + Math.random() * (b - a))
   const today = new Date()
@@ -271,6 +350,8 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
     const events = sessions * rnd(6, 11)
     return { day: d.toISOString().slice(0, 10), users, sessions, events }
   })
+  const demoWeeks = demoWeekly(daily)
+  const demoRet = demoNewRet(demoWeeks)
   const hourly = Array.from({ length: 24 }, (_, h) =>
     (h >= 7 && h <= 9) || (h >= 16 && h <= 18) ? rnd(60, 140) : h >= 1 && h <= 5 ? rnd(0, 6) : rnd(10, 50),
   )
@@ -286,9 +367,15 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
       sessions_today: 52, sessions_7d: 290, sessions_per_user_7d: 1.38,
       active_5m: 6, median_session_sec: 96, n_dur_sessions: 240,
     },
-    window: { days, events: 18450, users: 640, sessions: 900 },
+    window: {
+      days, events: 18450, users: 640, sessions: 900,
+      sessions_per_user: 1.41,
+      returning_users: demoRet.returning,
+      summary_users: demoRet.total,
+    },
     daily,
-    weekly: demoWeekly(daily),
+    weekly: demoWeeks,
+    newret: demoRet.rows,
     funnel: { sessions: 900, arcade: 520, started: 410, finished: 330 },
     hourly, dow,
     tabs: [
@@ -389,6 +476,52 @@ export function findMeasurementGap(daily: Daily[], minDays = 7): Gap | null {
     }
   }
   return best
+}
+
+// ---- Nieuw vs terugkerend ----------------------------------------------------
+// In productie rekent de RPC dit uit (migratie 0016), want het vraagt per
+// gebruiker het állereerste event ooit, ook van vóór het venster. Onderstaande
+// functie doet exact hetzelfde en dient hier twee doelen: ze vult de demo-modus
+// én legt als uitvoerbare specificatie vast wat "nieuw" en "terugkerend"
+// betekenen (zie de tests, inclusief de jaargrens).
+
+export interface Activity {
+  user: string
+  /** Maandag van de ISO-week, als 'YYYY-MM-DD'. */
+  week: string
+}
+
+/** Verdeelt per week de actieve gebruikers over nieuw en terugkerend.
+ *  Nieuw = eerste week ooit is deze week; terugkerend = die lag eerder.
+ *  Een gebruiker telt hooguit één keer per week. Weken zonder activiteit
+ *  blijven als nul-rij staan. */
+export function classifyNewReturning(
+  activity: Activity[],
+  firstWeekByUser: Record<string, string>,
+  weeks: string[],
+): NewRet[] {
+  const perWeek = new Map<string, { nieuw: number; terugkerend: number }>()
+  for (const w of weeks) perWeek.set(w, { nieuw: 0, terugkerend: 0 })
+  const counted = new Set<string>()
+  for (const { user, week } of activity) {
+    const bucket = perWeek.get(week)
+    if (!bucket) continue // buiten het venster
+    const key = `${user}@${week}`
+    if (counted.has(key)) continue
+    counted.add(key)
+    // ISO-datums vergelijken als string werkt chronologisch, ook over de
+    // jaargrens ('2025-12-29' < '2026-01-05').
+    const first = firstWeekByUser[user] ?? week
+    if (first < week) bucket.terugkerend++
+    else bucket.nieuw++
+  }
+  return weeks.map((w) => ({ week_start: w, ...(perWeek.get(w) as { nieuw: number; terugkerend: number }) }))
+}
+
+/** "38% van de gebruikers kwam terug (24 van 63)". */
+export function returningLine(returning: number, total: number): string {
+  const pct = total > 0 ? Math.round((returning / total) * 100) : 0
+  return `${pct}% van de gebruikers kwam terug (${nf(returning)} van ${nf(total)})`
 }
 
 const NL_MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
@@ -727,6 +860,7 @@ export function Admin() {
   // Bij "Alles" toont de kop de werkelijke spanwijdte die de RPC teruggaf.
   const winLabel = days === 0 ? (win?.days ? `alles, ${nf(win.days)}d` : 'alles') : `${days}d`
   const weekly = dash?.weekly ?? []
+  const newret = dash?.newret ?? []
   const gap = dash ? findMeasurementGap(dash.daily) : null
   const skel = !firstLoaded
 
@@ -818,9 +952,22 @@ export function Admin() {
             <Stat emoji="👥" label="Vandaag" value={nf(life?.users_today ?? 0)} sub={`unieke gebruikers · ${nf(life?.sessions_today ?? 0)} sessies`} accent="brand" />
             <Stat emoji="📅" label="Laatste 7 dagen" value={nf(life?.users_7d ?? 0)} sub={`unieke gebruikers · ${nf(life?.sessions_7d ?? 0)} sessies`} accent="sky" />
             <Stat emoji="🗓" label="Laatste 30 dagen" value={nf(life?.users_30d ?? 0)} sub={`totaal ooit: ${nf(life?.users_total ?? 0)}`} accent="violet" />
-            <Stat emoji="🔁" label="Sessies per gebruiker" value={life?.sessions_per_user_7d ?? '0'} sub={`7 dagen · n=${nf(life?.sessions_7d ?? 0)} sessies`} accent="amber" />
+            {/* Volgt het gekozen venster; viel eerder altijd terug op 7 dagen.
+                Zonder migratie 0016 levert de RPC nog geen venster-cijfer, dan
+                tonen we het 7-daagse getal met het bijbehorende label. */}
+            <Stat
+              emoji="🔁"
+              label="Sessies per gebruiker"
+              value={win?.sessions_per_user ?? life?.sessions_per_user_7d ?? '0'}
+              sub={
+                win?.sessions_per_user != null
+                  ? `${winLabel} · n=${nf(win?.sessions ?? 0)} sessies`
+                  : `7 dagen · n=${nf(life?.sessions_7d ?? 0)} sessies`
+              }
+              accent="amber"
+            />
             <Stat emoji="🟢" label="Actief nu (5 min)" value={nf(life?.active_5m ?? 0)} accent="brand" />
-            <Stat emoji="⏱" label="Sessieduur (mediaan)" value={fmtDuration(life?.median_session_sec ?? 0)} sub={`n=${nf(life?.n_dur_sessions ?? 0)} sessies met 2+ events`} accent="slate" />
+            <Stat emoji="⏱" label="Sessieduur (mediaan)" value={fmtDuration(life?.median_session_sec ?? 0)} sub={`n=${nf(life?.n_dur_sessions ?? 0)} sessies van 5s of langer`} accent="slate" />
           </div>
 
           {/* Dag-reeks: aangevuld met echte nullen, dus een stille dag is zichtbaar 0 */}
@@ -851,6 +998,31 @@ export function Admin() {
                     geen metingen {formatGapRange(gap)} (Supabase gepauzeerd)
                   </p>
                 )}
+              </Panel>
+            </div>
+          )}
+
+          {/* Nieuw vs terugkerend per week: komt een gebruiker voor het eerst,
+              of was hij er al eerder? Server-side geteld (migratie 0016). */}
+          {newret.length > 0 && (
+            <div className="mt-4">
+              <Panel title={`Nieuw vs terugkerend (${winLabel})`} emoji="🔁" sub={`n=${nf(win?.summary_users ?? 0)} gebruikers`}>
+                <p className="mb-2 text-sm font-semibold text-slate-700">
+                  {returningLine(win?.returning_users ?? 0, win?.summary_users ?? 0)}
+                </p>
+                <StackedColumns
+                  data={newret.map((r) => {
+                    const tot = r.nieuw + r.terugkerend
+                    const pct = tot > 0 ? Math.round((r.terugkerend / tot) * 100) : 0
+                    return {
+                      label: weekLabel(r.week_start),
+                      nieuw: r.nieuw,
+                      terugkerend: r.terugkerend,
+                      title: `${weekLabel(r.week_start)} (vanaf ${r.week_start}): ${nf(r.nieuw)} nieuw · ${nf(r.terugkerend)} terugkerend · ${pct}% terugkerend`,
+                    }
+                  })}
+                  labelEvery={Math.ceil(Math.max(1, newret.length) / 6)}
+                />
               </Panel>
             </div>
           )}
