@@ -18,20 +18,20 @@ interface FerryPickerProps {
 }
 
 /**
- * Laat de speler kiezen welke pont hij wacht. Alleen die afvaart pauzeert straks
- * de game; "Alleen spelen" pauzeert nooit. Live aftelklok per richting.
+ * Laat je kiezen op welke afvaart je wacht. Die keuze bepaalt met wie je
+ * elkaar kunt vinden op de pont (Pont Ontmoeting). Live aftelklok per richting.
  */
 export function FerryPicker({ options, value, onChange }: FerryPickerProps) {
   const { t } = useI18n()
 
-  const base =
-    'flex items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition border'
-  const on = 'border-white/80 bg-white/20'
-  const off = 'border-white/10 bg-white/5 hover:bg-white/10'
+  const base = 'flex items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition border'
+  const on = 'border-brand bg-brand/10 dark:border-brand dark:bg-brand/20'
+  const off =
+    'border-slate-200 bg-white hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10'
 
   return (
-    <div className="w-full max-w-xs text-left">
-      <p className="mb-2 text-xs font-medium text-white/70">{t.arcade.whichFerry}</p>
+    <section className="card px-5 py-4 text-left">
+      <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">{t.whichFerry}</p>
       <div className="grid grid-cols-2 gap-2">
         {options.map((o) => {
           const active = value === o.key
@@ -49,13 +49,13 @@ export function FerryPicker({ options, value, onChange }: FerryPickerProps) {
                 {o.line}
               </span>
               <span className="min-w-0 flex-1 leading-tight">
-                <span className="block truncate text-xs font-semibold text-white">
+                <span className="block truncate text-xs font-semibold">
                   → {STOPS[o.to]?.name ?? o.to}
                 </span>
-                <span className="block truncate text-[11px] text-white/60">
+                <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400">
                   {t.from} {STOPS[o.from]?.name ?? o.from}
                 </span>
-                <span className="block tabular-nums text-[11px] text-white/70">
+                <span className="block tabular-nums text-[11px] text-slate-500 dark:text-slate-400">
                   {o.secondsUntil != null ? clockCountdown(o.secondsUntil) : '–'}
                 </span>
               </span>
@@ -67,9 +67,9 @@ export function FerryPicker({ options, value, onChange }: FerryPickerProps) {
           onClick={() => onChange(null)}
           className={`${base} col-span-2 justify-center ${value === null ? on : off}`}
         >
-          🎮 {t.arcade.justPlaying}
+          {t.noFerryChosen}
         </button>
       </div>
-    </div>
+    </section>
   )
 }

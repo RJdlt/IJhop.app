@@ -1,13 +1,15 @@
 /**
  * Instellingen voor de prijs-inzending. Pas hier alles aan zonder andere code
- * aan te raken: vanaf welke score, hoe vaak we het tonen, en de prijs-tekst.
+ * aan te raken: vanaf welk bezoek we uitnodigen, hoe vaak, en de prijs-tekst.
  *
  * Onthoudt lokaal (per browser) of iemand al heeft meegedaan of de uitnodiging
- * heeft gezien, zodat het scherm mensen niet blijft lastigvallen.
+ * heeft gezien, zodat het scherm mensen niet blijft lastigvallen. Vroeger hing
+ * dit aan een spelscore; nu de spellen weg zijn, hangt het aan het aantal
+ * bezoeken, zodat we een eerste bezoeker niet meteen om zijn e-mail vragen.
  */
 export const PRIZE_CONFIG = {
-  // Vanaf welke score nodigen we uit.
-  minScore: 20,
+  // Vanaf het hoeveelste bezoek nodigen we uit.
+  minVisits: 2,
   // Hoe vaak tonen we de uitnodiging maximaal per gebruiker (browser).
   maxPrompts: 1,
   // Placeholder voor de prijs; later invullen, bijv. 'een diner bij [restaurant]'.
@@ -16,6 +18,7 @@ export const PRIZE_CONFIG = {
 
 const SEEN_KEY = 'ijhop:prize:seen'
 const DONE_KEY = 'ijhop:prize:done'
+const VISITS_KEY = 'ijhop:visits'
 
 export function prizeDone(): boolean {
   try {
@@ -46,8 +49,19 @@ export function markPrizeSeen(): void {
   }
 }
 
-/** Mag de uitnodiging nu getoond worden? (score hoog genoeg, nog niet meegedaan,
- *  en nog niet te vaak getoond) */
-export function shouldOfferPrize(score: number): boolean {
-  return score >= PRIZE_CONFIG.minScore && !prizeDone() && seenCount() < PRIZE_CONFIG.maxPrompts
+/** Telt dit bezoek en geeft het nieuwe totaal terug (1 bij het eerste bezoek). */
+export function bumpVisits(): number {
+  try {
+    const next = (parseInt(localStorage.getItem(VISITS_KEY) || '0', 10) || 0) + 1
+    localStorage.setItem(VISITS_KEY, String(next))
+    return next
+  } catch {
+    return 1
+  }
+}
+
+/** Mag de uitnodiging nu getoond worden? (vaak genoeg terug geweest, nog niet
+ *  meegedaan, en nog niet te vaak getoond) */
+export function shouldOfferPrize(visits: number): boolean {
+  return visits >= PRIZE_CONFIG.minVisits && !prizeDone() && seenCount() < PRIZE_CONFIG.maxPrompts
 }

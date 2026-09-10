@@ -3,28 +3,23 @@ import { Header } from './components/Header'
 import { RouteCard } from './components/RouteCard'
 import { CatchPanel } from './components/CatchPanel'
 import { Footer } from './components/Footer'
-import { ArcadeSnack } from './components/ArcadeSnack'
-import { TabBar } from './components/TabBar'
 import { InstallPrompt } from './components/InstallPrompt'
 import { SponsorCard } from './components/SponsorCard'
 import { OntmoetingCard } from './components/OntmoetingCard'
 import { OnboardingFavorites } from './components/OnboardingFavorites'
 import { DisruptionBanner } from './components/DisruptionBanner'
+import { PrizeEntry } from './components/PrizeEntry'
 import { FerryPicker } from './components/FerryPicker'
 import type { FerryOption } from './components/FerryPicker'
-import { ArcadeShell } from './arcade/ArcadeShell'
 import { useNow } from './hooks/useNow'
 import { useAnonSession } from './hooks/useAnonSession'
-import { usePresence } from './hooks/usePresence'
-import { useHashView } from './hooks/useHashView'
-import { getNickname } from './lib/nickname'
 import { setupPwaAutoUpdate } from './pwa'
 import { startAnalytics, track } from './lib/analytics'
 import { useI18n } from './i18n/i18n'
 import { amsterdamMoment } from './lib/time'
-import { clockCountdown } from './lib/format'
-import { CONNECTIONS, LINES, LINE_IDS, STOPS, nextDepartures, timetable } from './lib/schedule'
+import { CONNECTIONS, LINES, LINE_IDS, nextDepartures, timetable } from './lib/schedule'
 import { NotificationOptIn } from './components/NotificationOptIn'
+import { bumpVisits, shouldOfferPrize, markPrizeSeen } from './lib/prize'
 import type { StopPair } from './lib/schedule'
 import type { LineId } from './types'
 
@@ -42,16 +37,7 @@ const DIRECTIONS: Record<LineId, [StopPair, StopPair]> = Object.fromEntries(
 
 const FAV_KEY = 'ijhop:favlines'
 const FLIP_KEY = 'ijhop:flipped'
-
-// Onder deze grens toont het spel een opvallender (maar niet-blokkerend) tikje.
-const SOON_SECONDS = 60
-// Boven deze grens is het aftelbalkje nog niet relevant.
-const BANNER_SECONDS = 300
-// De overtocht-ranglijst wordt actief vanaf zo lang vóór vertrek (instappen)…
-const CROSSING_PRE_SECONDS = 300
-// …en blijft het de ~overtochtsduur lopen (de "13 minuten dat je erop staat").
-const CROSSING_RIDE_MS = 13 * 60 * 1000
-const WATCH_KEY = 'ijhop.arcade.watch'
+const WATCH_KEY = 'ijhop:watch'
 
 const connKey = (c: StopPair) => `${c.line}:${c.from}:${c.to}`
 
@@ -61,8 +47,6 @@ export default function App() {
   const nowSecondOfWeek = useMemo(() => amsterdamMoment(now).secondOfWeek, [now])
 
   const { userId } = useAnonSession()
-  const [view, navigate] = useHashView()
-  const [arcadeOpen, setArcadeOpen] = useState(false)
 
   // Nieuwe versie beschikbaar? Toon een verversen-knop i.p.v. vanzelf herladen.
   const [updateReady, setUpdateReady] = useState(false)
@@ -82,11 +66,11 @@ export default function App() {
     }
   }, [])
 
-  // Analytics: sessiestart + welke tab je bekijkt.
   useEffect(() => startAnalytics(), [])
-  useEffect(() => {
-    track('tab_view', { view })
-  }, [view])
+
+  // Hoe vaak deze browser de app al opende; bepaalt of we de prijs-uitnodiging
+  // tonen (niet meteen bij het allereerste bezoek).
+  const [visits] = useState(() => bumpVisits())
 
   // Richting per lijn (heen/terug), onthouden per browser: wie 's ochtends
   // altijd de kant van Centraal op kijkt, ziet die richting ook na herstart.
@@ -152,7 +136,7 @@ export default function App() {
     }
   }
 
-  // Welke pont de speler bewust afwacht (null = alleen spelen, nooit pauzeren).
+  // Op welke afvaart je wacht. Bepaalt met wie je elkaar kunt vinden op de pont.
   const [watchKey, setWatchKey] = useState<string | null>(
     () => (typeof window === 'undefined' ? null : window.localStorage.getItem(WATCH_KEY)),
   )
@@ -167,10 +151,12 @@ export default function App() {
     }
   }
 
-  // Live aftelklok per richting, voor de pont-keuze.
+  // Live aftelklok per richting, voor de pont-keuze. Heb je favorieten, dan
+  // tonen we alleen die richtingen: anders staat er een lijst van twintig
+  // knoppen onder je klok en dat leest niet meer.
   const ferryOptions = useMemo<FerryOption[]>(
     () =>
-      CONNECTIONS.map((c) => ({
+      CONNECTIONS.filter((c) => favLines.length === 0 || favs.has(c.line)).map((c) => ({
         key: connKey(c),
         line: c.line,
         from: c.from,
@@ -178,55 +164,11 @@ export default function App() {
         secondsUntil: nextDepartures({ from: c.from, to: c.to, nowSecondOfWeek, limit: 1 })[0]
           ?.secondsUntil,
       })),
-    [nowSecondOfWeek],
+    [nowSecondOfWeek, favs, favLines.length],
   )
 
-  // De gekozen pont onderbreekt het spel niet meer: enkel een rustig
-  // aftelbalkje bovenin, dat opvalt als de pont bijna gaat.
   const watched = watchKey ? ferryOptions.find((o) => o.key === watchKey) ?? null : null
   const watchedSecs = watched?.secondsUntil
-  const ferryBanner =
-    watched && watchedSecs != null && watchedSecs < BANNER_SECONDS ? (
-      <span
-        className={`pointer-events-none rounded-full px-3 py-1 text-xs font-semibold tabular-nums shadow-lg backdrop-blur ${
-          watchedSecs < SOON_SECONDS ? 'bg-amber-400 text-amber-950' : 'bg-black/40 text-white'
-        }`}
-      >
-        🚤 {watched.line} → {STOPS[watched.to]?.name ?? watched.to} · {clockCountdown(watchedSecs)}
-        {watchedSecs < SOON_SECONDS ? ` — ${t.arcade.ferryLeaves}` : ''}
-      </span>
-    ) : null
-
-  // De overtocht-ranglijst is alleen actief rond de afvaart die je pakt: vanaf
-  // het instappen (≤ CROSSING_PRE_SECONDS vóór vertrek) tot ~de overtochtsduur
-  // erna. De gekozen overtocht wordt "vastgepind" zodra je in dat venster komt,
-  // en blijft staan terwijl de aftelklok al naar de vólgende afvaart springt —
-  // precies "de minuten dat je erop staat".
-  const [activeCrossing, setActiveCrossing] = useState<{
-    room: string
-    label: string
-    untilMs: number
-  } | null>(null)
-
-  useEffect(() => {
-    const nowMs = now.getTime()
-    if (activeCrossing && nowMs > activeCrossing.untilMs) {
-      setActiveCrossing(null)
-      return
-    }
-    if (!activeCrossing && watched && watchedSecs != null && watchedSecs <= CROSSING_PRE_SECONDS) {
-      // Som = geplande vertrek-seconde (zelfde geheel getal voor iedereen).
-      const departSow = Math.floor(nowSecondOfWeek + watchedSecs)
-      setActiveCrossing({
-        room: `${watched.key}@${departSow}`,
-        label: `${watched.line} → ${STOPS[watched.to]?.name ?? watched.to}`,
-        untilMs: nowMs + watchedSecs * 1000 + CROSSING_RIDE_MS,
-      })
-    }
-  }, [now, watched, watchedSecs, activeCrossing, nowSecondOfWeek, t])
-
-  const crossingRoom = activeCrossing?.room ?? null
-  const crossingLabel = activeCrossing?.label
 
   // Pont Ontmoeting: overtocht-kamer zodra je een pont kiest (lijn + vertrekmoment),
   // zodat twee mensen op dezelfde afvaart elkaar kunnen vinden.
@@ -235,17 +177,13 @@ export default function App() {
       ? `${watched.key}@${Math.floor(nowSecondOfWeek + watchedSecs)}`
       : null
 
-  // Live spelers-teller op deze overtocht (presence), terwijl de arcade open is.
-  const presenceNick = useMemo(() => getNickname(), [])
-  const crossingPlayers = usePresence(
-    crossingRoom && (view === 'arcade' || arcadeOpen) ? `arcade:${crossingRoom}` : null,
-    userId,
-    presenceNick,
-  )
-
-  const ferryPicker = (
-    <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
-  )
+  // Eenmalige, rustige uitnodiging voor de prijzenactie. Niet bij het eerste
+  // bezoek: pas als iemand de app vaker opent is de vraag gepast.
+  const [offerPrize] = useState(() => {
+    const show = shouldOfferPrize(visits)
+    if (show) markPrizeSeen()
+    return show
+  })
 
   const renderRoute = (line: string) => (
     <RouteCard
@@ -264,92 +202,43 @@ export default function App() {
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-6">
         <Header />
 
-        {view === 'ferries' ? (
-          <main className="flex flex-col gap-4">
-            {/* Offline: klok blijft werken op de ingebouwde dienstregeling. */}
-            {!online && (
-              <p className="animate-riseIn self-center rounded-full bg-slate-200/80 px-3.5 py-1.5 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                📡 {t.offlineNote} ({timetable.generated})
-              </p>
-            )}
-            {/* Alleen zichtbaar bij een echte storing of 2+ meldingen; laadt
-                parallel en houdt de aftelklok nooit op. */}
-            <DisruptionBanner favLines={favLines} />
-            {(favLines.length > 0 ? favLines : LINE_IDS).map(renderRoute)}
-            {favLines.length > 0 && otherLines.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setShowOthers((s) => !s)}
-                  className="self-start rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm ring-1 ring-slate-100 transition hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10"
-                >
-                  {showOthers ? '▲' : '▼'} {t.otherFerries} ({otherLines.length})
-                </button>
-                {showOthers && otherLines.map(renderRoute)}
-              </>
-            )}
+        <main className="flex flex-col gap-4">
+          {/* Offline: klok blijft werken op de ingebouwde dienstregeling. */}
+          {!online && (
+            <p className="animate-riseIn self-center rounded-full bg-slate-200/80 px-3.5 py-1.5 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+              📡 {t.offlineNote} ({timetable.generated})
+            </p>
+          )}
+          {/* Alleen zichtbaar bij een echte storing of 2+ meldingen; laadt
+              parallel en houdt de aftelklok nooit op. */}
+          <DisruptionBanner favLines={favLines} />
+          {(favLines.length > 0 ? favLines : LINE_IDS).map(renderRoute)}
+          {favLines.length > 0 && otherLines.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowOthers((s) => !s)}
+                className="self-start rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm ring-1 ring-slate-100 transition hover:bg-slate-50 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10"
+              >
+                {showOthers ? '▲' : '▼'} {t.otherFerries} ({otherLines.length})
+              </button>
+              {showOthers && otherLines.map(renderRoute)}
+            </>
+          )}
 
-            {ontmoetingRoom && <OntmoetingCard room={ontmoetingRoom} userId={userId} />}
-            <ArcadeSnack
-              onOpen={() => {
-                track('snack_open')
-                setArcadeOpen(true)
-              }}
-            />
-            <CatchPanel nowSecondOfWeek={nowSecondOfWeek} />
-            <InstallPrompt />
-            <NotificationOptIn favLines={favLines} />
-            <SponsorCard />
-          </main>
-        ) : (
-          <main className="flex flex-1 flex-col">
-            {/* 'page': het menu stroomt als gewone pagina-inhoud (de pagina
-                scrollt, geen vakje-scroll). Alleen tijdens spelen een vast veld. */}
-            <ArcadeShell
-              layout="page"
-              menuExtra={ferryPicker}
-              banner={ferryBanner}
-              crossingRoom={crossingRoom}
-              watchedLine={watched?.line ?? null}
-              crossingLabel={crossingLabel}
-              crossingPlayers={crossingPlayers}
-            />
-          </main>
-        )}
+          <FerryPicker options={ferryOptions} value={watchKey} onChange={chooseWatch} />
+          {ontmoetingRoom && <OntmoetingCard room={ontmoetingRoom} userId={userId} />}
+          <CatchPanel nowSecondOfWeek={nowSecondOfWeek} />
+          <InstallPrompt />
+          <NotificationOptIn favLines={favLines} />
+          {offerPrize && <PrizeEntry />}
+          <SponsorCard />
+        </main>
 
-        {view === 'ferries' && (
-          <div className="mt-auto">
-            <Footer />
-          </div>
-        )}
-
-        <TabBar view={view} onNavigate={navigate} />
-      </div>
-
-      {/* Snack-overlay: dezelfde game boven de countdown. De ArcadeShell blijft
-          gemount terwijl we op het ponten-scherm zijn, zodat sluiten pauzeert
-          (niet weggooit) en de countdown eronder onaangeroerd blijft. */}
-      {view === 'ferries' && (
-        <div
-          className={`fixed inset-0 z-30 bg-brand-dark p-3 transition-opacity duration-200 ${
-            arcadeOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
-          }`}
-          aria-hidden={!arcadeOpen}
-        >
-          <div className="mx-auto h-full max-w-md pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
-            <ArcadeShell
-              paused={!arcadeOpen}
-              menuExtra={ferryPicker}
-              banner={ferryBanner}
-              crossingRoom={crossingRoom}
-              watchedLine={watched?.line ?? null}
-              crossingLabel={crossingLabel}
-              crossingPlayers={crossingPlayers}
-              onClose={() => setArcadeOpen(false)}
-            />
-          </div>
+        <div className="mt-auto">
+          <Footer />
         </div>
-      )}
+      </div>
 
       {!onboarded && (
         <OnboardingFavorites favs={favs} onToggle={toggleFav} onDone={finishOnboarding} />
@@ -357,7 +246,7 @@ export default function App() {
 
       {/* Niet-storende update-melding: één tik en je zit op de nieuwste versie. */}
       {updateReady && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-24 z-40 flex justify-center px-4">
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
           <button
             type="button"
             onClick={() => window.location.reload()}

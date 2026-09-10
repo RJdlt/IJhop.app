@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { buildSignal, matchSeed, type MeetingSignal } from '../arcade/ontmoeting/signal'
+import { buildSignal, matchSeed, type MeetingSignal } from '../lib/ontmoetingSignal'
 
 /**
  * Pont Ontmoeting, 1-op-1 matchmaking via Supabase Realtime presence.

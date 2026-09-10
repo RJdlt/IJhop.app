@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSignal, matchSeed } from './signal'
+import { buildSignal, matchSeed } from './ontmoetingSignal'
 
 describe('buildSignal', () => {
   it('is deterministisch: zelfde seed geeft zelfde signaal', () => {

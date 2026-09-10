@@ -74,51 +74,8 @@ export interface Strings {
   themeDark: string
   stopNames: Record<StopId, string>
   lastUpdated: string
-  // Arcade
-  arcade: {
-    tabFerries: string
-    tabGames: string
-    playWhileWaiting: string
-    title: string
-    pickGame: string
-    play: string
-    restart: string
-    menu: string
-    close: string
-    score: string
-    best: string
-    newRecord: string
-    paused: string
-    pausedDeparture: string
-    drownTagline: string
-    gameOver: string
-    tryAgain: string
-    mute: string
-    unmute: string
-    whichFerry: string
-    justPlaying: string
-    ferryLeaves: string
-    playAnyway: string
-    yourName: string
-    nameRejected: string
-    addedAs: string
-    save: string
-    leaderboard: string
-    noScoresYet: string
-    thisWeek: string
-    allTime: string
-    thisCrossing: string
-    bestOfLine: string
-    shareScore: string
-    shareFail: string
-    you: string
-    shopTitle: string
-    playerLevel: string
-    choose: string
-    chosen: string
-    buy: string
-    unlockAt: string
-  }
+  whichFerry: string
+  noFerryChosen: string
   install: {
     title: string
     subtitle: string
@@ -204,50 +161,8 @@ export const STRINGS: Record<Lang, Strings> = {
       pontsteiger: 'Pontsteiger',
     },
     lastUpdated: 'Dienstregeling bijgewerkt',
-    arcade: {
-      tabFerries: 'Ponten',
-      tabGames: 'Spelletjes',
-      playWhileWaiting: 'Speel terwijl je wacht',
-      title: 'IJhop Arcade',
-      pickGame: 'Kies een spel',
-      play: 'Speel',
-      restart: 'Opnieuw',
-      menu: 'Naar menu',
-      close: 'Sluiten',
-      score: 'Score',
-      best: 'Record',
-      newRecord: 'Nieuw record!',
-      paused: 'Gepauzeerd',
-      pausedDeparture: 'Je pont vertrekt zo — eerst varen.',
-      drownTagline: 'Niet zweten, niet zwemmen',
-      gameOver: 'Game over',
-      tryAgain: 'Probeer opnieuw',
-      mute: 'Geluid uit',
-      unmute: 'Geluid aan',
-      whichFerry: 'Welke pont wacht je op?',
-      justPlaying: 'Alleen spelen',
-      ferryLeaves: 'vertrekt zo',
-      playAnyway: 'Speel toch door',
-      yourName: 'Jouw naam',
-      nameRejected: 'Kies een nette naam (geen scheldwoorden).',
-      addedAs: 'In de Toplijst als',
-      save: 'Opslaan',
-      leaderboard: 'Toplijst',
-      noScoresYet: 'Nog geen scores — speel de eerste!',
-      thisWeek: 'Deze week',
-      allTime: 'Aller-tijden',
-      thisCrossing: 'Deze overtocht',
-      bestOfLine: 'Beste van de',
-      shareScore: 'Deel je score',
-      shareFail: 'Delen lukte niet',
-      you: 'Jij',
-      shopTitle: 'Poppetjes',
-      playerLevel: 'Niveau',
-      choose: 'Kies',
-      chosen: 'Gekozen',
-      buy: 'Koop',
-      unlockAt: 'Vrij bij',
-    },
+    whichFerry: 'Welke pont wacht je op?',
+    noFerryChosen: 'Even geen pont',
     install: {
       title: 'Zet IJhop op je beginscherm',
       subtitle: 'Open ’m als een echte app — schermvullend, sneller te openen en werkt offline.',
@@ -331,50 +246,8 @@ export const STRINGS: Record<Lang, Strings> = {
       pontsteiger: 'Pontsteiger',
     },
     lastUpdated: 'Timetable updated',
-    arcade: {
-      tabFerries: 'Ferries',
-      tabGames: 'Games',
-      playWhileWaiting: 'Play while you wait',
-      title: 'IJhop Arcade',
-      pickGame: 'Pick a game',
-      play: 'Play',
-      restart: 'Restart',
-      menu: 'To menu',
-      close: 'Close',
-      score: 'Score',
-      best: 'Best',
-      newRecord: 'New record!',
-      paused: 'Paused',
-      pausedDeparture: 'Your ferry leaves soon — catch it first.',
-      drownTagline: "Don't sweat, don't swim",
-      gameOver: 'Game over',
-      tryAgain: 'Try again',
-      mute: 'Mute',
-      unmute: 'Unmute',
-      whichFerry: 'Which ferry are you waiting for?',
-      justPlaying: 'Just playing',
-      ferryLeaves: 'leaves soon',
-      playAnyway: 'Keep playing',
-      yourName: 'Your name',
-      nameRejected: 'Pick a friendly name (no slurs).',
-      addedAs: 'On the leaderboard as',
-      save: 'Save',
-      leaderboard: 'Leaderboard',
-      noScoresYet: 'No scores yet — be the first!',
-      thisWeek: 'This week',
-      allTime: 'All-time',
-      thisCrossing: 'This crossing',
-      bestOfLine: 'Best of the',
-      shareScore: 'Share your score',
-      shareFail: 'Sharing failed',
-      you: 'You',
-      shopTitle: 'Characters',
-      playerLevel: 'Level',
-      choose: 'Select',
-      chosen: 'Selected',
-      buy: 'Buy',
-      unlockAt: 'Unlock at',
-    },
+    whichFerry: 'Which ferry are you waiting for?',
+    noFerryChosen: 'No ferry right now',
     install: {
       title: 'Add IJhop to your home screen',
       subtitle: 'Open it like a real app — full screen, quicker to launch and works offline.',

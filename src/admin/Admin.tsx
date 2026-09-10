@@ -55,12 +55,10 @@ interface Dash {
   /** Per ISO-week nieuw vs terugkerend; vraagt het eerste event ooit per
    *  gebruiker, dus ook server-side (migratie 0016). */
   newret?: NewRet[]
-  funnel: { sessions: number; arcade: number; started: number; finished: number }
+  funnel: { sessions: number; clock: number; notified: number }
   hourly: number[]
   dow: number[]
-  tabs: PropRow[]
   ferries: PropRow[]
-  characters: PropRow[]
   devices: PropRow[]
 }
 interface RecentEvent { name: string; props: Record<string, unknown> | null; path: string | null; created_at: string }
@@ -376,43 +374,31 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
     daily,
     weekly: demoWeeks,
     newret: demoRet.rows,
-    funnel: { sessions: 900, arcade: 520, started: 410, finished: 330 },
+    funnel: { sessions: 900, clock: 615, notified: 48 },
     hourly, dow,
-    tabs: [
-      { value: 'ferries', users: 520, events: 1400 },
-      { value: 'arcade', users: 310, events: 700 },
-    ],
     ferries: [
       { value: 'F4:ndsm:centraal', users: 180, events: 340 },
       { value: 'F7:ndsm:pontsteiger', users: 150, events: 280 },
       { value: 'F4:centraal:ndsm', users: 110, events: 190 },
       { value: 'F7:pontsteiger:ndsm', users: 60, events: 90 },
     ],
-    characters: [
-      { value: 'pim', users: 200, events: 300 },
-      { value: 'toerist', users: 80, events: 120 },
-      { value: 'wielrenner', users: 45, events: 70 },
-      { value: 'koning', users: 16, events: 25 },
-      { value: 'pontkat', users: 6, events: 8 },
-    ],
     devices: [
       { value: 'false', users: 420, events: 760 },
       { value: 'true', users: 260, events: 480 },
     ],
   }
-  const rn = ['game_over', 'ferry_pick', 'tab_view', 'snack_open', 'game_start', 'character_select', 'session_start', 'heartbeat']
+  const rn = ['ferry_pick', 'session_start', 'heartbeat', 'app_visible', 'delay_report', 'push_subscribe', 'disruption_shown']
   const recent: RecentEvent[] = Array.from({ length: 14 }, (_, i) => {
     const n = rn[rnd(0, rn.length)]
     const props =
-      n === 'game_over' ? { score: rnd(5, 130) } :
-      n === 'tab_view' ? { view: Math.random() < 0.6 ? 'ferries' : 'arcade' } :
       n === 'ferry_pick' ? { key: 'F7:ndsm:pontsteiger' } :
-      n === 'character_select' ? { id: 'toerist' } : null
+      n === 'delay_report' ? { line: 'F4', ok: true } :
+      n === 'session_start' ? { standalone: Math.random() < 0.4 } : null
     return { name: n, props, path: '/', created_at: new Date(Date.now() - i * rnd(20, 300) * 1000).toISOString() }
   })
   const dn = ['Sven', 'Lisa', 'Pim', 'Noa', 'Daan', 'Eva', 'Tim', 'Fleur']
   const entries: EntryRow[] = Array.from({ length: 8 }, (_, i) => ({
-    id: String(i), game_id: 'ponthop', score: rnd(20, 130), name: dn[i], email: `speler${i}@voorbeeld.nl`,
+    id: String(i), game_id: 'ijhop', score: 0, name: dn[i], email: `speler${i}@voorbeeld.nl`,
     created_at: new Date(Date.now() - i * 3_600_000 * rnd(1, 40)).toISOString(),
   }))
   return { dash, recent, entries }
@@ -694,17 +680,15 @@ export function Admin() {
     if (!supabase || !session) return
     setTestMsg('Bezig…')
     const uid = session.user.id
-    const names = ['session_start', 'tab_view', 'snack_open', 'ferry_pick', 'game_start', 'game_over', 'character_select', 'heartbeat', 'app_visible']
+    const names = ['session_start', 'ferry_pick', 'heartbeat', 'app_visible', 'app_hidden', 'delay_report', 'push_subscribe']
     const rnd = (a: number, b: number) => Math.floor(a + Math.random() * (b - a))
     const rows = Array.from({ length: 60 }, (_, i) => {
       const name = names[rnd(0, names.length)]
       const daysAgo = i < 10 ? 0 : rnd(0, 30)
       const created = new Date(Date.now() - daysAgo * 86_400_000 - rnd(0, 86_400_000))
       const props =
-        name === 'game_over' ? { score: rnd(0, 130), test: true } :
-        name === 'tab_view' ? { view: Math.random() < 0.6 ? 'ferries' : 'arcade', test: true } :
         name === 'ferry_pick' ? { key: ['F4:ndsm:centraal', 'F7:ndsm:pontsteiger'][rnd(0, 2)], test: true } :
-        name === 'character_select' ? { id: ['pim', 'toerist', 'wielrenner'][rnd(0, 3)], test: true } :
+        name === 'delay_report' ? { line: ['F4', 'F7'][rnd(0, 2)], ok: Math.random() < 0.5, test: true } :
         name === 'session_start' ? { standalone: Math.random() < 0.4, test: true } : { test: true }
       return { user_id: uid, session_id: `test-${i % 8}-${rnd(0, 9999)}`, name, props, path: '/test', created_at: created.toISOString() }
     })
@@ -850,9 +834,8 @@ export function Admin() {
   const funnelSteps = dash
     ? [
         { label: 'App geopend', value: dash.funnel.sessions, emoji: '👋' },
-        { label: 'Arcade bereikt', value: dash.funnel.arcade, emoji: '🎮' },
-        { label: 'Spel gestart', value: dash.funnel.started, emoji: '▶️' },
-        { label: 'Spel afgemaakt', value: dash.funnel.finished, emoji: '🏁' },
+        { label: 'Klok gezien', value: dash.funnel.clock ?? 0, emoji: '🕒' },
+        { label: 'Melding ingesteld', value: dash.funnel.notified ?? 0, emoji: '🔔' },
       ]
     : []
   const funnelBase = Math.max(1, dash?.funnel.sessions ?? 0)
@@ -1055,11 +1038,6 @@ export function Admin() {
                 <Columns data={dash.dow.map((v, i) => ({ label: DOW[i], value: v }))} color="bg-violet-500" />
               </Gate>
             </Panel>
-            <Panel title="Welke tab (unieke gebruikers)" emoji="🧭" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
-              <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
-                <BarList rows={dash.tabs.map((t) => ({ label: t.value === 'arcade' ? 'Spelletjes' : t.value === 'ferries' ? 'Ponten' : safeLabel(t.value), value: t.users, title: `${nf(t.events)} keer bekeken` }))} color="bg-sky-500" />
-              </Gate>
-            </Panel>
             <Panel title="Welk apparaat (unieke gebruikers)" emoji="📱" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
               <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
                 <BarList rows={dash.devices.map((r) => ({ label: deviceLabel(r.value), value: r.users }))} color="bg-violet-500" />
@@ -1073,11 +1051,6 @@ export function Admin() {
             <Panel title="Gekozen route (unieke gebruikers)" emoji="⛴️" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
               <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
                 <BarList rows={dash.ferries.map((r) => ({ label: ferryRouteLabel(r.value), value: r.users, title: `${nf(r.events)} keer gekozen` }))} color="bg-brand" />
-              </Gate>
-            </Panel>
-            <Panel title="Gekozen poppetje (unieke gebruikers)" emoji="🧑" sub={`n=${nf(win?.users ?? 0)} gebruikers`}>
-              <Gate n={win?.users ?? 0} min={10} unit="gebruikers">
-                <BarList rows={dash.characters.map((r) => ({ label: safeLabel(r.value), value: r.users }))} color="bg-amber-500" />
               </Gate>
             </Panel>
             <Panel title="Live activiteit" emoji="📡">
@@ -1124,7 +1097,6 @@ export function Admin() {
                   <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
                     <th className="py-1 font-semibold">Datum</th>
                     <th className="font-semibold">Naam</th>
-                    <th className="font-semibold">Score</th>
                     <th className="font-semibold">E-mail</th>
                   </tr>
                 </thead>
@@ -1133,7 +1105,6 @@ export function Admin() {
                     <tr key={e.id} className="border-t border-slate-100">
                       <td className="py-1.5 text-slate-500">{new Date(e.created_at).toLocaleDateString('nl-NL')}</td>
                       <td className="truncate text-slate-700">{e.name ?? '-'}</td>
-                      <td className="font-semibold tabular-nums text-slate-800">{e.score}</td>
                       <td className="truncate text-slate-700">{e.email}</td>
                     </tr>
                   ))}

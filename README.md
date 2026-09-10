@@ -29,22 +29,16 @@ je telefoon in een andere tijdzone staat).
 - 📲 **Installeerbare PWA** die volledig **offline** werkt — de hele
   dienstregeling zit in de app, dus geen bereik nodig aan de waterkant.
 
-## IJhop Arcade — Pont Hop 🛥️
+## Pont Ontmoeting 🤝
 
-Een Crossy-Road-achtige mini-game om te spelen terwijl je op de pont wacht.
-Kapitein Pim hopt het IJ over: van steiger naar steiger, meedrijvend op de
-ponten (F4/F7), watertaxi's ontwijkend en stroopwafels verzamelend. Te openen
-via de **🕹️-snack** op het countdown-scherm of de **Spelletjes**-tab.
+Kies op welke afvaart je wacht en de app maakt een kamertje voor precies die
+overtocht. Wie op dezelfde pont wacht ziet dat er iemand anders is, zodat je
+elkaar aan boord kunt vinden. Verder niets: geen profielen, geen chat.
 
-De game pauzeert automatisch als je echte pont binnen 60 s vertrekt — wachttijd
-gaat voor. Hij is opgezet als kleine game-shell (`src/arcade/`) met een
-`GameModule`-interface, zodat een volgend spel toevoegen neerkomt op één nieuw
-bestand + één regel in `registry.ts`. De spel-logica zit in een pure, geteste
-engine (`engine.ts`, draait los van canvas):
-
-```bash
-npm test        # Vitest: gameplay-regels (botsingen, meedrijven, score, idle)
-```
+> **Weg sinds september 2026:** de arcade (Pont Hop en De Oversteek). Uit de
+> analytics bleek dat 6% van de bezoekers de spellen ooit opende en 4% een
+> potje afmaakte. De app is nu één scherm: de klok. De prijzenactie bleef, maar
+> hangt niet meer aan een score.
 
 ## Data
 
