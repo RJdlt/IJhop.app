@@ -6,7 +6,7 @@ import { durableStorage } from './durableStorage'
  * (https://<ref>.supabase.co), maar de env-var staat soms per ongeluk op het
  * REST-endpoint (…/rest/v1/). Zonder deze opschoning bouwt de client
  * …/rest/v1/rest/v1/… → "Invalid path specified in request URL", waardoor
- * ranglijst, auth én presence stilletjes breken.
+ * ranglijst en auth stilletjes breken.
  */
 function normalizeUrl(raw: string | undefined): string | undefined {
   if (!raw) return raw

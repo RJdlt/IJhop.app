@@ -47,7 +47,10 @@ export default function App() {
   const now = useNow(1000)
   const nowSecondOfWeek = useMemo(() => amsterdamMoment(now).secondOfWeek, [now])
 
-  const { userId } = useAnonSession()
+  // Zorgt vroeg voor een anonieme sessie, zodat de eerste analytics-events
+  // meteen een user_id hebben. De id zelf heeft het klokscherm niet meer
+  // nodig sinds het tik-duel weg is.
+  useAnonSession()
 
   // Nieuwe versie beschikbaar? Toon een verversen-knop i.p.v. vanzelf herladen.
   // Nieuwe versie beschikbaar? Toon een balkje. We herladen nooit uit
@@ -214,7 +217,6 @@ export default function App() {
       key={line}
       connection={DIRECTIONS[line][flipped[line] ? 1 : 0]}
       nowSecondOfWeek={nowSecondOfWeek}
-      userId={userId}
       onSwap={() => swap(line)}
       favorite={favs.has(line)}
       onToggleFav={() => toggleFav(line)}

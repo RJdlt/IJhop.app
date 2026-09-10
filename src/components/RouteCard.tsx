@@ -1,36 +1,26 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useI18n } from '../i18n/i18n'
 import { clockCountdown, relativeLabel } from '../lib/format'
 import { LINES, STOPS, nextDepartures } from '../lib/schedule'
 import type { StopPair } from '../lib/schedule'
-import { getNickname } from '../lib/nickname'
-import { roomKeyFor, duelChannelFor } from '../lib/rooms'
 import { canReport, reportDelay } from '../lib/delayReports'
 import { track } from '../lib/analytics'
-import { usePresence } from '../hooks/usePresence'
 import { SwapIcon } from './icons'
-import { ReactionDuel } from './ReactionDuel'
 
 interface RouteCardProps {
   connection: StopPair
   nowSecondOfWeek: number
-  userId: string | null
   onSwap: () => void
   favorite?: boolean
   onToggleFav?: () => void
 }
 
-export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap, favorite, onToggleFav }: RouteCardProps) {
+export function RouteCard({ connection, nowSecondOfWeek, onSwap, favorite, onToggleFav }: RouteCardProps) {
   const { t, lang } = useI18n()
   const { from, to, line } = connection
   const color = LINES[line].color
   const departures = nextDepartures({ from, to, nowSecondOfWeek, limit: 4 })
   const next = departures[0]
-
-  // Presence per route: wie wacht er mee op deze afvaart?
-  const nick = useMemo(() => getNickname(), [])
-  const roomKey = roomKeyFor(connection)
-  const waiters = usePresence(roomKey, userId, nick)
 
   // Community-melding: één tik, anoniem, max één per lijn per 20 minuten.
   const [delayState, setDelayState] = useState<'idle' | 'busy' | 'done' | 'cooldown'>(() =>
@@ -146,18 +136,6 @@ export function RouteCard({ connection, nowSecondOfWeek, userId, onSwap, favorit
         </button>
       </div>
 
-      {/* Realtime tik-duel: alleen als er minstens twee mensen meewachten */}
-      {waiters >= 2 && (
-        <div className="border-t border-slate-100 px-5 py-4 dark:border-white/5">
-          <p className="mb-2 text-xs font-medium text-slate-400">👥 {waiters} wachten mee</p>
-          <ReactionDuel
-            channelName={duelChannelFor(roomKey)}
-            userId={userId}
-            nick={nick}
-            playerCount={waiters}
-          />
-        </div>
-      )}
     </section>
   )
 }
