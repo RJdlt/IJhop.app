@@ -7,7 +7,12 @@
 # dan vanzelf. De zomertijd/wintertijd-KLOK is hier geen onderdeel van: die
 # gaat runtime automatisch goed via Intl met Europe/Amsterdam (src/lib/time.ts).
 #
-# Handmatig draaien kan altijd via "Run workflow" (workflow_dispatch).
+# Daarnaast draait hier een wekelijkse keep-alive: één lichte SELECT op
+# Supabase, zodat het gratis project niet opnieuw wegens inactiviteit pauzeert
+# (dat gebeurde in augustus 2026 en kostte vijf weken metingen).
+#
+# Handmatig draaien kan altijd via "Run workflow" (workflow_dispatch); dan
+# draaien beide taken, handig om ze te testen.
 name: Dienstregeling verversen
 
 on:
@@ -15,6 +20,8 @@ on:
     # Elke 1e van de maand om 04:12 UTC (rustig tijdstip, niet op het hele uur
     # zodat we niet meepieken met ieders cron-jobs richting de GTFS-server).
     - cron: '12 4 1 * *'
+    # Elke maandag 06:00 UTC: keep-alive tegen het pauzeren van het project.
+    - cron: '0 6 * * 1'
   workflow_dispatch: {}
 
 permissions:
@@ -22,6 +29,9 @@ permissions:
 
 jobs:
   regenerate:
+    # Alleen op de maandelijkse cron (en bij handmatig draaien), niet op de
+    # wekelijkse keep-alive-cron.
+    if: github.event_name != 'schedule' || github.event.schedule == '12 4 1 * *'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,3 +97,40 @@ jobs:
           git add src/data/timetable.json
           git commit -m "Dienstregeling automatisch ververst (maandelijkse GTFS-check)"
           git push
+
+  keepalive:
+    # Alleen op de wekelijkse cron (en bij handmatig draaien). Houdt het gratis
+    # Supabase-project wakker met één lichte, RLS-afgeschermde SELECT.
+    if: github.event_name != 'schedule' || github.event.schedule == '0 6 * * 1'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase (lichte SELECT)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
+            echo "::error::Zet de repo-secrets SUPABASE_URL en SUPABASE_ANON_KEY (Settings > Secrets and variables > Actions). De anon-sleutel staat sowieso al publiek in de app-bundle, dus dit geeft geen extra toegang."
+            exit 1
+          fi
+          url="${SUPABASE_URL%/}/rest/v1/analytics_events?select=count"
+          # Anon mag door RLS niets lezen; de query raakt Postgres wél, en dat
+          # is precies wat telt als activiteit. Body is dus [{"count":0}].
+          code=$(curl -sS --max-time 30 -o body.txt -w '%{http_code}' "$url" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+          body=$(head -c 200 body.txt)
+          echo "Keep-alive $(date -u '+%Y-%m-%d %H:%M UTC') -> HTTP ${code} ${body}"
+          {
+            echo "### Supabase keep-alive"
+            echo ""
+            echo "- Tijd: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "- HTTP: \`${code}\`"
+            echo "- Antwoord: \`${body}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$code" != "200" ]; then
+            echo "::error::Supabase antwoordde niet met 200. Staat het project misschien gepauzeerd?"
+            exit 1
+          fi
+          echo "Project is wakker."

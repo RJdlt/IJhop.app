@@ -8,6 +8,7 @@ import { LINES, STOPS } from '../lib/schedule'
 // Eén dashboard-RPC (migratie 0012) levert alles: consistent Europe/Amsterdam,
 // test-events uitgesloten, dagen zonder events als echte nullen.
 interface Daily { day: string; users: number; sessions: number; events: number }
+interface Weekly { week_start: string; users: number; sessions: number; events: number }
 // `value` komt uit `props->>'key'` (of ->>'view'/'id') op vrije JSONB: als het
 // veld in de events-tabel letterlijk JSON null was (bijv. een gewiste
 // pont-keuze), levert Postgres hier SQL NULL. Dus altijd string | null, nooit
@@ -34,8 +35,10 @@ interface Dash {
     median_session_sec: number
     n_dur_sessions: number
   }
-  window: { days: number; events: number; users: number; sessions: number }
+  window: { days: number; events: number; users: number; sessions: number; all_time?: boolean; start_day?: string }
   daily: Daily[]
+  /** Per ISO-week; unieke tellingen komen server-side (niet uit `daily` af te leiden). */
+  weekly?: Weekly[]
   funnel: { sessions: number; arcade: number; started: number; finished: number }
   hourly: number[]
   dow: number[]
@@ -232,6 +235,28 @@ function SkeletonBody() {
 }
 
 // ---- Demo-data (client-side, NIET naar de database) ------------------------
+/** Weekreeks voor demo-modus: groepeert de demo-dagen op maandag. Alleen voor
+ *  de demo; echte unieke tellingen komen uit de RPC (zie migratie 0015). */
+function demoWeekly(daily: Daily[]): Weekly[] {
+  const byWeek = new Map<string, Weekly>()
+  for (const d of daily) {
+    const dt = new Date(`${d.day}T00:00:00Z`)
+    dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7))
+    const key = dt.toISOString().slice(0, 10)
+    const acc = byWeek.get(key) ?? { week_start: key, users: 0, sessions: 0, events: 0 }
+    // Demo-benadering: dag-uniques bij elkaar, met een dempingsfactor omdat
+    // dezelfde persoon vaak meerdere dagen in dezelfde week terugkomt.
+    acc.users += d.users
+    acc.sessions += d.sessions
+    acc.events += d.events
+    byWeek.set(key, acc)
+  }
+  return [...byWeek.values()]
+    .map((w) => ({ ...w, users: Math.round(w.users * 0.62) }))
+    .sort((a, b) => a.week_start.localeCompare(b.week_start))
+}
+
+
 function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: EntryRow[] } {
   const rnd = (a: number, b: number) => Math.floor(a + Math.random() * (b - a))
   const today = new Date()
@@ -263,6 +288,7 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
     },
     window: { days, events: 18450, users: 640, sessions: 900 },
     daily,
+    weekly: demoWeekly(daily),
     funnel: { sessions: 900, arcade: 520, started: 410, finished: 330 },
     hourly, dow,
     tabs: [
@@ -303,6 +329,77 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
     created_at: new Date(Date.now() - i * 3_600_000 * rnd(1, 40)).toISOString(),
   }))
   return { dash, recent, entries }
+}
+
+// ---- Tijdvenster -------------------------------------------------------------
+// 0 = "Alles": de RPC begint dan bij het eerste event ooit in plaats van bij
+// een datumgrens. De keuze wordt per browser onthouden.
+const WINDOW_KEY = 'ijhop.admin.window'
+const WINDOWS: { value: number; label: string }[] = [
+  { value: 7, label: '7d' },
+  { value: 30, label: '30d' },
+  { value: 90, label: '90d' },
+  { value: 0, label: 'Alles' },
+]
+
+// ---- Weken en meetgaten ------------------------------------------------------
+// De weekgrafiek labelt op ISO-weeknummer. De server levert alleen de
+// weekstart (maandag); het nummer rekenen we hier uit, zodat de labelregels
+// los testbaar zijn (inclusief de jaargrens, waar 29 dec al week 1 kan zijn).
+
+/** ISO-8601 weeknummer + bijbehorend ISO-jaar voor een 'YYYY-MM-DD'-datum. */
+export function isoWeekOf(isoDate: string): { year: number; week: number } {
+  const d = new Date(`${isoDate.slice(0, 10)}T00:00:00Z`)
+  if (Number.isNaN(d.getTime())) return { year: 0, week: 0 }
+  // De donderdag van deze week bepaalt zowel het ISO-jaar als het weeknummer.
+  const dayIdx = (d.getUTCDay() + 6) % 7 // maandag = 0
+  d.setUTCDate(d.getUTCDate() - dayIdx + 3)
+  const year = d.getUTCFullYear()
+  const firstThursday = new Date(Date.UTC(year, 0, 4))
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - ((firstThursday.getUTCDay() + 6) % 7) + 3)
+  const week = 1 + Math.round((d.getTime() - firstThursday.getTime()) / (7 * 86_400_000))
+  return { year, week }
+}
+
+/** Kort weeklabel voor onder een balk, bijv. "wk 32". */
+export function weekLabel(weekStart: string): string {
+  const { week } = isoWeekOf(weekStart)
+  return week ? `wk ${week}` : '—'
+}
+
+export interface Gap {
+  from: string
+  to: string
+  days: number
+}
+/** Langste aaneengesloten reeks dagen zonder enig event (>= minDays), of null.
+ *  Maakt een meetgat zichtbaar in plaats van het als "rustige dagen" te lezen. */
+export function findMeasurementGap(daily: Daily[], minDays = 7): Gap | null {
+  let best: Gap | null = null
+  let start = -1
+  for (let i = 0; i <= daily.length; i++) {
+    const isZero = i < daily.length && daily[i].events === 0
+    if (isZero && start === -1) start = i
+    if (!isZero && start !== -1) {
+      const days = i - start
+      if (days >= minDays && (!best || days > best.days)) {
+        best = { from: daily[start].day, to: daily[i - 1].day, days }
+      }
+      start = -1
+    }
+  }
+  return best
+}
+
+const NL_MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec']
+/** "4 aug – 10 sep" voor de meetgat-notitie. */
+export function formatGapRange(g: Gap): string {
+  const short = (iso: string) => {
+    const [, m, d] = iso.slice(0, 10).split('-')
+    const mi = parseInt(m, 10) - 1
+    return `${parseInt(d, 10)} ${NL_MONTHS[mi] ?? m}`
+  }
+  return `${short(g.from)} – ${short(g.to)}`
 }
 
 // ---- Pont-gebruik ------------------------------------------------------------
@@ -351,7 +448,24 @@ export function Admin() {
   const [session, setSession] = useState<Session | null>(null)
   const [checking, setChecking] = useState(true)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
-  const [days, setDays] = useState(30)
+  // Tijdvenster in dagen; 0 = "Alles" (vanaf het eerste event ooit). Onthouden
+  // per browser, zodat je niet elke keer opnieuw hoeft te kiezen.
+  const [days, setDaysState] = useState<number>(() => {
+    try {
+      const raw = parseInt(localStorage.getItem(WINDOW_KEY) ?? '', 10)
+      return WINDOWS.some((w) => w.value === raw) ? raw : 30
+    } catch {
+      return 30
+    }
+  })
+  const setDays = (v: number) => {
+    setDaysState(v)
+    try {
+      localStorage.setItem(WINDOW_KEY, String(v))
+    } catch {
+      /* faal stil */
+    }
+  }
   const [auto, setAuto] = useState(true)
   const [loading, setLoading] = useState(false)
   const [firstLoaded, setFirstLoaded] = useState(false)
@@ -610,6 +724,10 @@ export function Admin() {
     : []
   const funnelBase = Math.max(1, dash?.funnel.sessions ?? 0)
   const lineUsage = dash ? aggregateByLine(dash.ferries) : []
+  // Bij "Alles" toont de kop de werkelijke spanwijdte die de RPC teruggaf.
+  const winLabel = days === 0 ? (win?.days ? `alles, ${nf(win.days)}d` : 'alles') : `${days}d`
+  const weekly = dash?.weekly ?? []
+  const gap = dash ? findMeasurementGap(dash.daily) : null
   const skel = !firstLoaded
 
   return (
@@ -632,8 +750,8 @@ export function Admin() {
               {life?.active_5m ?? 0} live
             </span>
             <div className="flex overflow-hidden rounded-full bg-white/15 text-xs font-semibold">
-              {[7, 30].map((d) => (
-                <button key={d} type="button" onClick={() => setDays(d)} className={`px-3 py-1.5 ${days === d ? 'bg-white text-brand' : 'text-white'}`}>{d}d</button>
+              {WINDOWS.map((w) => (
+                <button key={w.value} type="button" onClick={() => setDays(w.value)} className={`px-3 py-1.5 ${days === w.value ? 'bg-white text-brand' : 'text-white'}`}>{w.label}</button>
               ))}
             </div>
             <button type="button" onClick={() => setDemo((v) => !v)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${demo ? 'bg-amber-300 text-amber-950' : 'bg-white/15 text-white'}`}>🎭 Demo</button>
@@ -646,6 +764,19 @@ export function Admin() {
       </div>
 
       {/* Fouten zichtbaar maken: nooit een stil leeg dashboard */}
+      {/* "Alles" vraagt p_days=0; de RPC van vóór migratie 0015 rondt dat af
+          naar één dag. Zeg dat dan expliciet in plaats van stilletjes 1 dag
+          te tonen alsof dat "alles" is. */}
+      {days === 0 && dash && !demo && !dash.window.all_time && (
+        <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800 ring-1 ring-amber-200">
+          <p className="font-semibold">⏳ "Alles" werkt nog niet volledig</p>
+          <p className="mt-1 text-xs">
+            Draai migratie <strong>0015_analytics_window_weekly.sql</strong> in de Supabase SQL-editor. Tot die tijd
+            toont dit venster maar één dag en ontbreekt de weekgrafiek.
+          </p>
+        </div>
+      )}
+
       {dashErr && !demo && (
         <div className="mt-4 rounded-2xl bg-rose-50 p-4 text-sm text-rose-700 ring-1 ring-rose-200">
           <p className="font-semibold">⚠️ Dashboard-data kon niet laden</p>
@@ -694,7 +825,7 @@ export function Admin() {
 
           {/* Dag-reeks: aangevuld met echte nullen, dus een stille dag is zichtbaar 0 */}
           <div className="mt-4">
-            <Panel title={`Unieke gebruikers per dag (${days}d)`} emoji="📈" sub={`n=${nf(win?.events ?? 0)} events in venster`}>
+            <Panel title={`Unieke gebruikers per dag (${winLabel})`} emoji="📈" sub={`n=${nf(win?.events ?? 0)} events in venster`}>
               <Columns
                 data={dash.daily.map((d) => ({ label: d.day.slice(5), value: d.users, title: `${d.day}: ${nf(d.users)} gebruikers · ${nf(d.sessions)} sessies · ${nf(d.events)} events` }))}
                 labelEvery={Math.ceil(Math.max(1, dash.daily.length) / 6)}
@@ -702,9 +833,31 @@ export function Admin() {
             </Panel>
           </div>
 
+          {/* Week-reeks: zelfde stijl, maar unieke gebruikers per ISO-week. Lege
+              weken staan als 0-balk, zodat een meetgat zichtbaar blijft. */}
+          {weekly.length > 0 && (
+            <div className="mt-4">
+              <Panel title={`Unieke gebruikers per week (${winLabel})`} emoji="🗓" sub={`n=${nf(weekly.length)} weken`}>
+                <Columns
+                  data={weekly.map((w) => ({
+                    label: weekLabel(w.week_start),
+                    value: w.users,
+                    title: `${weekLabel(w.week_start)} (vanaf ${w.week_start}): ${nf(w.users)} gebruikers · ${nf(w.sessions)} sessies`,
+                  }))}
+                  labelEvery={Math.ceil(Math.max(1, weekly.length) / 6)}
+                />
+                {gap && (
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    geen metingen {formatGapRange(gap)} (Supabase gepauzeerd)
+                  </p>
+                )}
+              </Panel>
+            </div>
+          )}
+
           {/* Laag 2: wat doen ze? Met minimale steekproef per widget. */}
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Panel title={`Funnel (${days}d)`} emoji="🫳" sub={`n=${nf(dash.funnel.sessions)} sessies`}>
+            <Panel title={`Funnel (${winLabel})`} emoji="🫳" sub={`n=${nf(dash.funnel.sessions)} sessies`}>
               <Gate n={dash.funnel.sessions} min={10} unit="sessies">
                 <div className="flex flex-col gap-2">
                   {funnelSteps.map((s) => (
