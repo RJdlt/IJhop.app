@@ -74,8 +74,6 @@ export interface Strings {
   themeDark: string
   stopNames: Record<StopId, string>
   lastUpdated: string
-  whichFerry: string
-  noFerryChosen: string
   deals: {
     badge: string
     teaser: string
@@ -180,8 +178,6 @@ export const STRINGS: Record<Lang, Strings> = {
       pontsteiger: 'Pontsteiger',
     },
     lastUpdated: 'Dienstregeling bijgewerkt',
-    whichFerry: 'Welke pont wacht je op?',
-    noFerryChosen: 'Even geen pont',
     deals: {
       badge: 'Pontdeal',
       teaser: 'Volgende Pontdeal: maandag',
@@ -284,8 +280,6 @@ export const STRINGS: Record<Lang, Strings> = {
       pontsteiger: 'Pontsteiger',
     },
     lastUpdated: 'Timetable updated',
-    whichFerry: 'Which ferry are you waiting for?',
-    noFerryChosen: 'No ferry right now',
     deals: {
       badge: 'Ferry deal',
       teaser: 'Next ferry deal: Monday',
