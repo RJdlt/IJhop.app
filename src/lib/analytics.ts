@@ -14,17 +14,44 @@ const SESSION_KEY = 'ijhop:analytics:session'
 export const HEARTBEAT_MS = 30_000
 export const HEARTBEAT_MAX = 20
 
-function sessionId(): string {
+/** Willekeurig id, ook als crypto.randomUUID ontbreekt (oudere Safari, niet-
+ *  beveiligde context). Faalt nooit, want hierop hangt de sessie-telling. */
+export function randomId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch {
+    /* val door naar de eenvoudige variant */
+  }
+  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+// Reserve-sessie-id in het geheugen, per pagina-instantie.
+let memorySessionId: string | null = null
+
+/** Sessie-id per tab. Zonder sessionStorage (privémodus, geblokkeerde opslag)
+ *  krijgt elk bezoek een eigen id in het geheugen. Voorheen kregen al die
+ *  bezoeken de letterlijke string 'nosession', waardoor honderden losse
+ *  bezoeken in het dashboard samenklonterden tot één sessie: precies waarom
+ *  er minder sessies dan gebruikers geteld werden. */
+export function sessionId(): string {
   try {
     let s = sessionStorage.getItem(SESSION_KEY)
     if (!s) {
-      s = crypto.randomUUID()
+      s = randomId()
       sessionStorage.setItem(SESSION_KEY, s)
     }
     return s
   } catch {
-    return 'nosession'
+    if (!memorySessionId) memorySessionId = randomId()
+    return memorySessionId
   }
+}
+
+/** Alleen voor tests: vergeet de geheugen-reserve tussen gevallen. */
+export function resetMemorySessionForTests(): void {
+  memorySessionId = null
 }
 
 /** Stuurt één event in. Faalt stil (analytics mag nooit de app breken). */

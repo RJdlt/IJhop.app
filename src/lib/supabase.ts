@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { durableStorage } from './durableStorage'
 
 /**
  * Normaliseer de project-URL: supabase-js verwacht de basis
@@ -20,7 +21,18 @@ const url = normalizeUrl(import.meta.env.VITE_SUPABASE_URL)
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase: SupabaseClient | null =
-  url && anonKey ? createClient(url, anonKey) : null
+  url && anonKey
+    ? createClient(url, anonKey, {
+        // De anonieme sessie bepaalt `user_id` in de analytics. Bewaar 'm
+        // daarom niet alleen in localStorage maar ook in IndexedDB, en herstel
+        // 'm daaruit zodra localStorage leeg is. Zonder dit maakte de app bij
+        // elke gewiste opslag een nieuwe anonieme gebruiker aan, wat het
+        // gebruikersaantal opblies en retentie kunstmatig naar nul duwde.
+        // Overige auth-standaarden (persistSession, autoRefreshToken,
+        // detectSessionInUrl voor de admin-inloglink) blijven ongewijzigd.
+        auth: { storage: durableStorage },
+      })
+    : null
 
 /** Zorgt voor een (anonieme) sessie en geeft het user-id terug, of null. */
 export async function ensureAnonSession(): Promise<string | null> {
