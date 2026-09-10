@@ -48,6 +48,12 @@ export default {
         },
         // Voor de Pontdeal: kort en klein. Geen stuiter, geen confetti; de
         // kaart komt binnen zonder de klok te overstemmen.
+        // Alleen opkomen, niet bewegen: de strook staat boven de klok en
+        // mag daar niets laten schuiven.
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
         dealIn: {
           '0%': { opacity: '0', transform: 'translateY(4px) scale(0.99)' },
           '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
@@ -57,6 +63,7 @@ export default {
         pulseDot: 'pulseDot 1.6s ease-in-out infinite',
         riseIn: 'riseIn 0.4s ease-out both',
         dealIn: 'dealIn 0.2s ease-out both',
+        fadeIn: 'fadeIn 0.2s ease-out both',
       },
     },
   },

@@ -175,3 +175,49 @@ export function stripStatus(
   if (!Number.isFinite(eind) || now.getTime() > eind) return 'geen'
   return 'gepakt'
 }
+
+// ---- De strook bovenaan het klokscherm --------------------------------------
+
+/** Het venster waarin de bovenstrook mag verschijnen, in minuten na
+ *  middernacht op de Amsterdamse klok. */
+export const TOP_STRIP_START_MIN = 16 * 60 + 30
+export const TOP_STRIP_END_MIN = 21 * 60
+
+/**
+ * Mag de strook boven de klok staan?
+ *
+ * Alleen 's avonds tussen half vijf en negen, en alleen op een dag dat de
+ * deal echt loopt. Overdag staat iemand op de steiger naar zijn werk te
+ * kijken hoe laat de pont gaat; dan hoort er niets boven die klok. 's Avonds
+ * is de haast eraf en is de vraag "zullen we wat halen" op zijn plaats.
+ *
+ * Wegklikken geldt voor de hele dealweek: `dismissedFor` bewaart de
+ * begindatum van de deal die je wegklikte. Komt er maandag een nieuwe, dan
+ * verschijnt de strook weer, want dat is een ander aanbod.
+ *
+ * In een adminpreview laten we het venster los. Anders kun je je eigen deal
+ * alleen tussen half vijf en negen op een maandag, dinsdag of woensdag
+ * nakijken, en dat is geen voorvertoning maar een wachtkamer.
+ */
+export function topStripVisible(
+  deal: { valid_from: string; valid_to: string } | null,
+  now: Date = new Date(),
+  dismissedFor: string | null = null,
+  preview = false,
+): boolean {
+  if (!deal) return false
+  if (dismissedFor && dismissedFor === deal.valid_from) return false
+  if (preview) return true
+
+  const van = Date.parse(deal.valid_from)
+  const tot = Date.parse(deal.valid_to)
+  if (!Number.isFinite(van) || !Number.isFinite(tot)) return false
+  const t = now.getTime()
+  if (t < van || t > tot) return false
+
+  const { weekday, hour, minute } = amsterdamMoment(now)
+  // 0 = maandag; de deal loopt tot en met woensdag.
+  if (weekday > 2) return false
+  const min = hour * 60 + minute
+  return min >= TOP_STRIP_START_MIN && min < TOP_STRIP_END_MIN
+}

@@ -106,6 +106,8 @@ export interface DealsBlock {
   by_stop: DealStopRow[]
   by_mode?: DealSplitRow[]
   by_photo?: DealSplitRow[]
+  /** De strook boven de klok: gezien en aangetikt (migratie 0025). */
+  by_strip?: DealSplitRow[]
   return: DealReturn
 }
 /** Eén appversie in het venster. `first_seen` bepaalt welke de nieuwste is. */
@@ -518,6 +520,7 @@ function makeDemo(days: number): { dash: Dash; recent: RecentEvent[]; entries: E
         { value: 'true', seen: 30, claimed: 23 },
         { value: 'false', seen: 180, claimed: 41 },
       ],
+      by_strip: [{ value: 'vol', seen: 96, claimed: 34 }],
       return: { with_deal: 64, with_deal_returned: 29, without_deal: 240, without_deal_returned: 62 },
     },
     hourly, dow,
@@ -1355,6 +1358,13 @@ export function Admin() {
                     <SplitLijst
                       titel="Per kaartvorm"
                       rijen={dealBlok.by_mode ?? []}
+                      naam={(v) => MODE_LABEL[v] ?? v}
+                    />
+                  )}
+                  {(dealBlok.by_strip?.length ?? 0) > 0 && (
+                    <SplitLijst
+                      titel="Strook boven de klok (gezien → aangetikt)"
+                      rijen={dealBlok.by_strip ?? []}
                       naam={(v) => MODE_LABEL[v] ?? v}
                     />
                   )}

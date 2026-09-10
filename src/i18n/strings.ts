@@ -95,6 +95,7 @@ export interface Strings {
     previewTitle: string
     previewNote: string
     previewCode: string
+    stripDismiss: string
   }
   install: {
     line: string
@@ -199,6 +200,7 @@ export const STRINGS: Record<Lang, Strings> = {
       previewTitle: 'Preview',
       previewNote: 'Alleen jij ziet dit. De deal staat nog niet live en niets hiervan telt mee.',
       previewCode: 'Testcode',
+      stripDismiss: 'Deze week niet meer tonen',
     },
     install: {
       line: 'Zet IJhop op je beginscherm: één tik en je ziet de volgende pont, ook zonder internet.',
@@ -301,6 +303,7 @@ export const STRINGS: Record<Lang, Strings> = {
       previewTitle: 'Preview',
       previewNote: 'Only you can see this. The deal is not live yet and nothing here counts.',
       previewCode: 'Test code',
+      stripDismiss: 'Hide for this week',
     },
     install: {
       line: 'Add IJhop to your home screen: one tap and you see the next ferry, even without internet.',

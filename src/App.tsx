@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Header } from './components/Header'
 import { RouteCard } from './components/RouteCard'
 import { CatchPanel } from './components/CatchPanel'
@@ -10,6 +10,7 @@ import { DisruptionBanner } from './components/DisruptionBanner'
 import { PrizeEntry } from './components/PrizeEntry'
 import { DealCard } from './components/DealCard'
 import { DealStrip } from './components/DealStrip'
+import { DealTopStrip } from './components/DealTopStrip'
 import { DealRedeem } from './components/DealRedeem'
 import { TipFriend } from './components/TipFriend'
 import { useNow } from './hooks/useNow'
@@ -178,6 +179,14 @@ export default function App() {
     preview: dealPreview,
   } = useDeal(dealStops)
   const [redeemOpen, setRedeemOpen] = useState(false)
+  // De bovenstrook springt hierheen als je hem aantikt zonder code.
+  const dealKaartRef = useRef<HTMLDivElement>(null)
+  const naarDealKaart = () => {
+    const el = dealKaartRef.current
+    if (!el) return
+    const rustig = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: rustig ? 'auto' : 'smooth', block: 'center' })
+  }
   const grabDeal = async () => {
     if (!deal) return
     if (!dealPreview) {
@@ -217,6 +226,19 @@ export default function App() {
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-5 px-4 py-6">
         <Header />
 
+        {/* Boven de klok is de duurste plek van het scherm. Deze strook staat
+            er alleen 's avonds op een dealdag, en één keer wegklikken houdt
+            hem de hele week weg. */}
+        <DealTopStrip
+          deal={deal}
+          code={dealCode}
+          departStops={departStops}
+          arriveStops={arriveStops}
+          onOpenCode={() => setRedeemOpen(true)}
+          onScrollToCard={naarDealKaart}
+          preview={dealPreview}
+        />
+
         <main className="flex flex-col gap-4">
           {/* Offline: klok blijft werken op de ingebouwde dienstregeling. */}
           {!online && (
@@ -247,6 +269,7 @@ export default function App() {
           {/* De deal staat onder de klok, nooit erboven: hij is een beloning
               voor wie toch al wacht. Heb je hem gepakt, dan neemt de strook
               zijn plaats in; dan is de kaart zelf niet meer nodig. */}
+          <div ref={dealKaartRef}>
           {dealCode ? (
             <DealStrip deal={deal} code={dealCode} onOpen={() => setRedeemOpen(true)} />
           ) : (
@@ -261,6 +284,7 @@ export default function App() {
               preview={dealPreview}
             />
           )}
+          </div>
           <TipFriend redeemedAt={dealCode?.redeemed_at ?? null} />
 
           <CatchPanel nowSecondOfWeek={nowSecondOfWeek} />

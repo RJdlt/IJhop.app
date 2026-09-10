@@ -7,6 +7,7 @@ import {
   OFFER_MAX_WORDS,
   REDEEMED_STRIP_MS,
   stripStatus,
+  topStripVisible,
   validateOffer,
 } from './dealCard'
 import { amsterdamInstant } from './time'
@@ -196,5 +197,77 @@ describe('stripStatus', () => {
   it('valt niet om op onzin-tijdstempels', () => {
     expect(stripStatus({ code: 'AB37', redeemed_at: 'kaas' }, eind, nu)).toBe('geen')
     expect(stripStatus({ code: 'AB37', redeemed_at: null }, 'kaas', nu)).toBe('geen')
+  })
+})
+
+describe('topStripVisible', () => {
+  // Maandag 7 t/m woensdag 9 september 2026, zomertijd.
+  const deal = {
+    valid_from: amsterdamInstant('2026-09-07', '00:00:00') as string,
+    valid_to: amsterdamInstant('2026-09-09', '23:59:59') as string,
+  }
+
+  it('verschijnt op een dealdag tussen half vijf en negen', () => {
+    expect(topStripVisible(deal, om('2026-09-07', '16:30:00'))).toBe(true)
+    expect(topStripVisible(deal, om('2026-09-08', '18:00:00'))).toBe(true)
+    expect(topStripVisible(deal, om('2026-09-09', '20:59:59'))).toBe(true)
+  })
+
+  it('blijft weg tijdens de ochtendspits en overdag', () => {
+    expect(topStripVisible(deal, om('2026-09-07', '08:15:00'))).toBe(false)
+    expect(topStripVisible(deal, om('2026-09-07', '13:00:00'))).toBe(false)
+    expect(topStripVisible(deal, om('2026-09-07', '16:29:59'))).toBe(false)
+  })
+
+  it('blijft weg na negenen en s nachts', () => {
+    expect(topStripVisible(deal, om('2026-09-07', '21:00:00'))).toBe(false)
+    expect(topStripVisible(deal, om('2026-09-08', '23:30:00'))).toBe(false)
+    expect(topStripVisible(deal, om('2026-09-08', '03:00:00'))).toBe(false)
+  })
+
+  it('blijft weg op donderdag tot en met zondag', () => {
+    // Het venster van deze deal is dan sowieso voorbij, maar ook met een deal
+    // die nog zou lopen hoort donderdag niets boven de klok te staan.
+    const langer = { valid_from: deal.valid_from, valid_to: amsterdamInstant('2026-09-13', '23:59:59') as string }
+    expect(topStripVisible(langer, om('2026-09-10', '18:00:00'))).toBe(false)
+    expect(topStripVisible(langer, om('2026-09-12', '18:00:00'))).toBe(false)
+  })
+
+  it('rekent op de Amsterdamse klok en niet op UTC', () => {
+    // 15:00 UTC is hier 17:00 in de zomer: binnen het venster.
+    expect(topStripVisible(deal, new Date('2026-09-07T15:00:00Z'))).toBe(true)
+    // 16:00 UTC is hier 18:00, ook binnen; 19:30 UTC is 21:30, erbuiten.
+    expect(topStripVisible(deal, new Date('2026-09-07T19:30:00Z'))).toBe(false)
+  })
+
+  it('toont niets zonder deal', () => {
+    expect(topStripVisible(null, om('2026-09-07', '18:00:00'))).toBe(false)
+  })
+
+  it('blijft weg zodra je hem wegklikte, de hele week', () => {
+    expect(topStripVisible(deal, om('2026-09-07', '18:00:00'), deal.valid_from)).toBe(false)
+    expect(topStripVisible(deal, om('2026-09-09', '18:00:00'), deal.valid_from)).toBe(false)
+  })
+
+  it('komt terug bij de deal van de week erna', () => {
+    const volgende = {
+      valid_from: amsterdamInstant('2026-09-14', '00:00:00') as string,
+      valid_to: amsterdamInstant('2026-09-16', '23:59:59') as string,
+    }
+    // Vorige week weggeklikt; deze week is het een ander aanbod.
+    expect(topStripVisible(volgende, om('2026-09-14', '18:00:00'), deal.valid_from)).toBe(true)
+  })
+
+  it('laat het venster los in een preview', () => {
+    // Anders kun je je eigen deal alleen dinsdagavond nakijken.
+    expect(topStripVisible(deal, om('2026-09-12', '10:00:00'), null, true)).toBe(true)
+  })
+
+  it('respecteert wegklikken ook in een preview', () => {
+    expect(topStripVisible(deal, om('2026-09-07', '18:00:00'), deal.valid_from, true)).toBe(false)
+  })
+
+  it('valt niet om op onzin-tijdstempels', () => {
+    expect(topStripVisible({ valid_from: 'kaas', valid_to: 'worst' }, om('2026-09-07', '18:00:00'))).toBe(false)
   })
 })
