@@ -71,12 +71,58 @@ function isActive(periods, nowSec) {
 }
 
 // Ook de meervouden: een stakingsbericht zegt eerder "ponten"/"veren" dan "pont".
-const FERRY_WORD = /\b(pont|ponten|veerpont|veerponten|veer|veren)\b/i
-// Netwerkbrede berichten (staking, algehele uitval) noemen de veren vaak niet
-// en taggen alleen bus/tram/metro-haltes; herken ze aan het trefwoord of aan
-// de breedte: een GVB-alert dat zoveel haltes tegelijk raakt is netwerkbreed.
-const NETWORK_WORD = /\b(staking|stakingen|geen vervoer|gehele netwerk)\b/i
-const NETWORK_STOP_THRESHOLD = 60
+export const FERRY_WORD = /\b(pont|ponten|veerpont|veerponten|veer|veren|veerdienst|veerdiensten)\b/i
+
+/**
+ * Netwerkbrede berichten: een staking of algehele uitval raakt ook de veren,
+ * ook als het bericht ze niet noemt.
+ *
+ * Hier stond eerder ook een drempel op het aantal haltes: een GVB-alert dat
+ * meer dan zestig haltes raakte gold als netwerkbreed. Dat was fout. Een
+ * omleiding van één tramlijn raakt makkelijk zestig haltes, en zo'n bericht
+ * werd dan als algemene veerstoring naar álle abonnees gestuurd. Zie de
+ * tram-25-melding in de tests. Breedte zegt niets over de vervoerwijze; alleen
+ * de woorden doen dat.
+ */
+export const NETWORK_WORD =
+  /\b(staking|stakingen|landelijk|landelijke|geen vervoer|alle lijnen|gehele netwerk|heel het netwerk)\b/i
+
+/**
+ * Noemt dit bericht een concrete bus-, tram- of metrolijn?
+ *
+ * GVB schrijft de vervoerwijze altijd voluit met het nummer erachter: "Tram 25
+ * rijdt om", "Bus N91 en N93 stoppen hier niet", "Metro 52". Het nummer is het
+ * verschil dat telt: "geen trams en bussen" in een stakingsbericht noemt geen
+ * lijn en blijft dus netwerkbreed.
+ */
+export const OTHER_MODE_WORD =
+  /\b(bus|bussen|tram|trams|metro|nachtbus|nachtlijn)\s*(?:lijn\s*)?(?:[0-9]|N[0-9])/i
+
+export function mentionsOtherMode(text) {
+  return OTHER_MODE_WORD.test(text || '')
+}
+
+/**
+ * Gaat dit bericht over de veren? Een veersteiger in de tags, een veer-woord in
+ * de tekst, of een veerlijnnummer (F4, F20).
+ */
+export const FERRY_LINE_WORD = /\bF[0-9]{1,2}\b/
+
+export function mentionsFerry(text) {
+  return FERRY_WORD.test(text || '') || FERRY_LINE_WORD.test(text || '')
+}
+
+/**
+ * Is dit een netwerkbreed bericht?
+ *
+ * Trefwoord én geen concrete bus-, tram- of metrolijn. Een bericht dat een
+ * lijnnummer noemt gaat over die lijn, hoe groot de woorden eromheen ook zijn.
+ */
+export function isNetworkWide(header, body) {
+  const tekst = `${header || ''} ${body || ''}`
+  if (!NETWORK_WORD.test(tekst)) return false
+  return !mentionsOtherMode(tekst)
+}
 
 /** Filter het volledige feed naar actieve GVB-veeralerts (max 5, nieuwste eerst). */
 export function filterFerryAlerts(entities, nowSec) {
@@ -86,25 +132,27 @@ export function filterFerryAlerts(entities, nowSec) {
     if (!isActive(e.alert.activePeriod, nowSec)) continue
 
     const stopKeys = new Set()
-    const allStops = new Set()
     for (const ie of e.alert.informedEntity ?? []) {
       if (ie.stopId == null) continue
-      const sid = String(ie.stopId)
-      allStops.add(sid)
-      const key = FERRY_STOP_IDS[sid]
+      const key = FERRY_STOP_IDS[String(ie.stopId)]
       if (key) stopKeys.add(key)
     }
     const header = nlText(e.alert.headerText)
     const body = nlText(e.alert.descriptionText)
-    const textMatch = FERRY_WORD.test(header) || FERRY_WORD.test(body)
-    // Netwerkbreed (bijv. landelijke ov-staking, 9 sept 2026: 1070 haltes,
-    // nul veersteigers, geen "pont" in de tekst): telt als algemene melding
-    // die alle lijnen raakt (stops blijft dan leeg = alle lijnen).
-    const networkWide =
-      NETWORK_WORD.test(header) || NETWORK_WORD.test(body) || allStops.size >= NETWORK_STOP_THRESHOLD
-    // Zonder veersteiger-match, veer-woord of netwerkbreed signaal: overslaan.
-    // Bij netwerkbreed blijft stops leeg, en leeg betekent verderop "alle
+    const tekst = `${header} ${body}`
+    const textMatch = mentionsFerry(tekst)
+
+    // Harde grens: noemt het bericht een bus-, tram- of metrolijn en staat er
+    // nergens een veerlijn, veersteiger of veer-woord in, dan gaat het niet
+    // over de veren. Ongeacht hoeveel haltes het raakt. Dit is de regel die de
+    // tram-25-melding tegenhoudt.
+    if (mentionsOtherMode(tekst) && !textMatch && stopKeys.size === 0) continue
+
+    // Netwerkbreed (landelijke ov-staking): telt als algemene melding die alle
+    // lijnen raakt; stops blijft dan leeg, en leeg betekent verderop "alle
     // veerlijnen" voor zowel de banner als de pushmeldingen.
+    const networkWide = isNetworkWide(header, body)
+
     if (stopKeys.size === 0 && !textMatch && !networkWide) continue
     if (!header) continue
 
@@ -113,6 +161,12 @@ export function filterFerryAlerts(entities, nowSec) {
       id: e.id,
       header,
       stops: [...stopKeys].sort(),
+      // Expliciet meegeven of dit een netwerkbreed bericht is, zodat de
+      // push-checker niet hoeft te raden wat een lege stops-lijst betekent.
+      networkWide,
+      // De lijnen meteen meegeven: de push-checker en het dashboard hoeven dan
+      // niet zelf te raden wat een lege stops-lijst betekent.
+      lines: resolveLines([...stopKeys], tekst, networkWide),
       start: periods.length ? num(periods[0].start) : null,
       end: periods.length ? num(periods[0].end) : null,
     })
@@ -121,10 +175,46 @@ export function filterFerryAlerts(entities, nowSec) {
   return out.slice(0, 5)
 }
 
-/** Welke lijnen raakt een alert? Lege stops = algemene veermelding = alle lijnen. */
-export function alertLines(alert) {
+/** Veerlijnnummers die letterlijk in de tekst staan ("Pont F4 vaart niet"). */
+export function linesFromText(text) {
   const all = Object.keys(FERRY_LINES)
-  if (!alert.stops || alert.stops.length === 0) return all
-  const hit = new Set(alert.stops)
-  return all.filter((line) => FERRY_LINES[line].some((s) => hit.has(s)))
+  const gevonden = new Set()
+  for (const m of String(text || '').matchAll(/\bF([0-9]{1,2})\b/g)) {
+    const naam = `F${m[1]}`
+    if (all.includes(naam)) gevonden.add(naam)
+  }
+  return [...gevonden]
+}
+
+/**
+ * Welke veerlijnen raakt dit bericht?
+ *
+ * In volgorde van hoe zeker we zijn:
+ *  1. Getagde veersteigers. Dat is het hardste signaal dat er is.
+ *  2. Een veerlijnnummer in de tekst, als er geen steigers getagd zijn.
+ *  3. Netwerkbreed: dan raakt het alles.
+ *  4. Een veerbericht zonder verdere aanwijzing: dan alle lijnen, want een
+ *     veerstoring waarvan we de lijn niet kennen willen we liever te breed dan
+ *     helemaal niet melden.
+ *
+ * Het verschil met vroeger zit in stap 4: die gold toen ook voor berichten die
+ * helemaal niet over de veren gingen, omdat "geen steigers getagd" als
+ * "algemene veermelding" werd gelezen. Wat daar nooit meer komt is nu al in
+ * filterFerryAlerts weggefilterd.
+ */
+export function resolveLines(stops, text, networkWide) {
+  const all = Object.keys(FERRY_LINES)
+  if (stops && stops.length > 0) {
+    const hit = new Set(stops)
+    return all.filter((line) => FERRY_LINES[line].some((s) => hit.has(s)))
+  }
+  const uitTekst = linesFromText(text)
+  if (uitTekst.length > 0) return uitTekst
+  return all
+}
+
+/** Welke lijnen raakt een alert? Gebruikt `lines` als die er staat. */
+export function alertLines(alert) {
+  if (Array.isArray(alert.lines) && alert.lines.length > 0) return alert.lines
+  return resolveLines(alert.stops ?? [], alert.header ?? '', alert.networkWide === true)
 }

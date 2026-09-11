@@ -137,6 +137,18 @@ export interface VersionRow {
   first_seen: string
   last_seen: string
 }
+/** Eén verstuurde storingsmelding, uit push_sent (migratie 0027). */
+export interface PushSentRow {
+  alert_id: string
+  header: string | null
+  lines: string[] | null
+  network_wide: boolean
+  recipients: number
+  sent_at: string
+  blocked: boolean
+  block_reason: string | null
+  changes: number
+}
 interface RecentEvent { name: string; props: Record<string, unknown> | null; path: string | null; created_at: string }
 interface AdminRow { user_id: string; email: string | null; created_at: string }
 interface InviteRow { id: string; email: string; status: string; expires_at: string; used_at: string | null; created_at: string }
@@ -932,6 +944,8 @@ export function Admin() {
   const [admins, setAdmins] = useState<AdminRow[]>([])
   const [invites, setInvites] = useState<InviteRow[]>([])
   const [entries, setEntries] = useState<EntryRow[]>([])
+  const [pushSent, setPushSent] = useState<PushSentRow[]>([])
+  const [pushBezig, setPushBezig] = useState<string | null>(null)
   const [inviteEmail, setInviteEmail] = useState('')
   const [newInvite, setNewInvite] = useState<{ email: string } | null>(null)
   const [mgmtMsg, setMgmtMsg] = useState<string | null>(null)
@@ -978,12 +992,13 @@ export function Admin() {
     if (!supabase) return
     setLoading(true)
     const list = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : [])
-    const [db, rc, ad, iv, he] = await Promise.all([
+    const [db, rc, ad, iv, he, ps] = await Promise.all([
       supabase.rpc('analytics_dashboard', { p_days: days, p_include_own: includeOwn }),
       supabase.rpc('analytics_recent', { lim: 40 }),
       supabase.rpc('admin_list_admins'),
       supabase.rpc('admin_list_invites'),
       supabase.rpc('admin_list_highscore_entries'),
+      supabase.rpc('admin_list_push_sent', { p_days: 30 }),
     ])
     // Fouten zijn zichtbaar, nooit stilletjes een leeg dashboard.
     if (db.error) {
@@ -996,6 +1011,7 @@ export function Admin() {
     setAdmins(list<AdminRow>(ad.data))
     setInvites(list<InviteRow>(iv.data))
     setEntries(list<EntryRow>(he.data))
+    setPushSent(list<PushSentRow>(ps.data))
     setLastUpdated(new Date()); setFirstLoaded(true); setLoading(false)
   }, [days, demo, includeOwn])
 
@@ -1156,6 +1172,24 @@ export function Admin() {
         </div>
       </Shell>
     )
+  }
+
+  /** Een melding als onterecht markeren, of die markering weer weghalen. */
+  const blokkeer = async (r: PushSentRow) => {
+    if (!supabase || pushBezig) return
+    setPushBezig(r.alert_id)
+    const { error } = r.blocked
+      ? await supabase.rpc('admin_unblock_alert', { p_alert_id: r.alert_id })
+      : await supabase.rpc('admin_block_alert', {
+          p_alert_id: r.alert_id,
+          p_reason: 'onterecht gemarkeerd in het dashboard',
+        })
+    setPushBezig(null)
+    if (!error) {
+      setPushSent((lijst) =>
+        lijst.map((x) => (x.alert_id === r.alert_id ? { ...x, blocked: !x.blocked } : x)),
+      )
+    }
   }
 
   // ---- Dashboard ----
@@ -1725,6 +1759,76 @@ export function Admin() {
           </div>
           {demo && <p className="mt-2 text-xs text-amber-600">Zet Demo uit om met echte test-events te werken.</p>}
           {testMsg && !demo && <p className="mt-2 text-xs text-slate-500">{testMsg}</p>}
+        </Panel>
+      </div>
+
+      {/* Verstuurde storingsmeldingen */}
+      <div className="mt-4">
+        <Panel title="Verstuurde meldingen" emoji="🔔" sub="laatste 30 dagen">
+          {pushSent.length === 0 ? (
+            <Empty text="Nog geen meldingen verstuurd, of migratie 0027 is nog niet gedraaid." />
+          ) : (
+            <div className="max-h-96 overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                    <th className="py-1 font-semibold">Wanneer</th>
+                    <th className="font-semibold">Melding</th>
+                    <th className="font-semibold">Lijnen</th>
+                    <th className="font-semibold">Ontvangers</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pushSent.map((r) => (
+                    <tr key={r.alert_id} className="border-t border-slate-100 align-top">
+                      <td className="whitespace-nowrap py-1.5 text-slate-500">
+                        {new Date(r.sent_at).toLocaleString('nl-NL', {
+                          day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="max-w-64 text-slate-700">
+                        <span className={r.blocked ? 'line-through opacity-60' : ''}>
+                          {r.header ?? r.alert_id}
+                        </span>
+                        <span className="block text-[10px] text-slate-400">
+                          {r.alert_id}
+                          {r.changes > 0 && ` · tekst ${r.changes}x gewijzigd`}
+                        </span>
+                      </td>
+                      <td className="text-slate-600">
+                        {r.network_wide ? (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                            netwerkbreed
+                          </span>
+                        ) : (
+                          (r.lines ?? []).join(', ') || '-'
+                        )}
+                      </td>
+                      <td className="tabular-nums text-slate-700">{nf(r.recipients)}</td>
+                      <td className="whitespace-nowrap text-right">
+                        <button
+                          type="button"
+                          onClick={() => blokkeer(r)}
+                          disabled={pushBezig === r.alert_id}
+                          className={`min-h-[44px] text-xs font-semibold underline-offset-2 hover:underline disabled:opacity-50 ${
+                            r.blocked ? 'text-slate-500' : 'text-rose-700'
+                          }`}
+                        >
+                          {pushBezig === r.alert_id ? '…' : r.blocked ? 'weer toestaan' : 'onterecht'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                "Onterecht" zet de melding op de blokkeerlijst: hij gaat er nooit meer uit, ook
+                niet als GVB de tekst aanpast. Een tekstwijziging leidt sowieso niet tot een
+                tweede melding; die wordt alleen geteld.
+              </p>
+            </div>
+          )}
         </Panel>
       </div>
 

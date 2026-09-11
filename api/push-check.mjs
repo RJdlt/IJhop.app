@@ -56,23 +56,69 @@ export default async function handler(req, res) {
       return
     }
 
-    // 2. Alleen storingen die we nog niet gemeld hebben.
-    const sentResp = await rest(
-      `push_sent?select=alert_id&alert_id=in.(${alerts.map((a) => `"${a.id}"`).join(',')})`,
+    // 2. Blokkeerlijst: alerts die een admin als onterecht heeft gemarkeerd
+    // gaan er nooit meer uit, ook niet als GVB de tekst aanpast.
+    const blockResp = await rest(
+      `push_alert_blocklist?select=alert_id&alert_id=in.(${alerts.map((a) => `"${a.id}"`).join(',')})`,
     )
-    const sentIds = new Set((await sentResp.json()).map((x) => x.alert_id))
-    const fresh = alerts.filter((a) => !sentIds.has(a.id))
-    if (fresh.length === 0) {
-      res.status(200).json({ ok: true, alerts: alerts.length, sent: 0 })
+    const geblokkeerd = new Set(
+      blockResp.ok ? (await blockResp.json()).map((x) => x.alert_id) : [],
+    )
+
+    // 3. Wat we van deze alerts al weten. De tekst bewaren we mee, want GVB
+    // hergebruikt dezelfde id bij een gewijzigde melding; dat leggen we apart
+    // vast in plaats van er nog een keer voor te trillen.
+    const sentResp = await rest(
+      `push_sent?select=alert_id,header&alert_id=in.(${alerts.map((a) => `"${a.id}"`).join(',')})`,
+    )
+    const bekend = new Map(
+      sentResp.ok ? (await sentResp.json()).map((x) => [x.alert_id, x.header ?? null]) : [],
+    )
+
+    // Tekstwijzigingen loggen. Geen nieuwe melding: één storing hoort één keer
+    // te trillen, ook als de bewoording verandert.
+    for (const a of alerts) {
+      if (!bekend.has(a.id)) continue
+      const oud = bekend.get(a.id)
+      if (oud != null && oud !== a.header) {
+        await rest('push_alert_changes', {
+          method: 'POST',
+          headers: { Prefer: 'return=minimal' },
+          body: JSON.stringify({ alert_id: a.id, old_header: oud, new_header: a.header }),
+        }).catch(() => {})
+        await rest(`push_sent?alert_id=eq.${encodeURIComponent(a.id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ header: a.header }),
+        }).catch(() => {})
+      }
+    }
+
+    const teDoen = alerts.filter((a) => !geblokkeerd.has(a.id))
+    if (teDoen.length === 0) {
+      res.status(200).json({ ok: true, alerts: alerts.length, blocked: geblokkeerd.size, sent: 0 })
       return
     }
 
-    // 3. Abonnees laden en per storing de geraakte lijnen matchen.
+    // 4. Abonnees laden.
     const subsResp = await rest('push_subscriptions?select=endpoint,p256dh,auth,lines')
     const subs = (await subsResp.json()) ?? []
+
+    // Wie kreeg welke alert al? Ontdubbelen gebeurt per abonnee en niet
+    // globaal: wie zich later abonneert mist een lopende storing anders
+    // helemaal, en een geslaagde tweede poging was niet te onderscheiden van
+    // een eerste voor iemand nieuw.
+    const alRespons = await rest(
+      `push_sent_to?select=alert_id,endpoint&alert_id=in.(${teDoen.map((a) => `"${a.id}"`).join(',')})`,
+    )
+    const al = new Set(
+      alRespons.ok ? (await alRespons.json()).map((x) => `${x.alert_id}|${x.endpoint}`) : [],
+    )
+
     let sent = 0
     const dead = []
-    for (const alert of fresh) {
+    for (const alert of teDoen) {
+      // De lijnen komen uit het filter zelf; dat weet of het bericht
+      // netwerkbreed was en hoeft hier niet geraden te worden.
       const lines = alertLines(alert)
       const payload = JSON.stringify({
         title: `Storing op pont ${lines.length <= 3 ? lines.join(', ') : 'GVB'}`,
@@ -80,30 +126,61 @@ export default async function handler(req, res) {
         tag: alert.id,
         url: '/',
       })
+
+      let ontvangers = 0
       for (const sub of subs) {
-        if (!Array.isArray(sub.lines) || !sub.lines.some((l) => lines.includes(l))) continue
+        // Echte lijn-overlap tussen wat deze abonnee koos en wat dit bericht
+        // raakt. Geen "raakt toevallig een veerlijn": als F4 en F9 gekozen
+        // zijn en de storing raakt F2, dan gaat het hem niet aan.
+        const gekozen = Array.isArray(sub.lines) ? sub.lines : []
+        if (gekozen.length === 0) continue
+        if (!gekozen.some((l) => lines.includes(l))) continue
+        if (al.has(`${alert.id}|${sub.endpoint}`)) continue
+
         try {
           await webpush.sendNotification(
             { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
             payload,
           )
           sent++
+          ontvangers++
+          await rest('push_sent_to', {
+            method: 'POST',
+            headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
+            body: JSON.stringify({ alert_id: alert.id, endpoint: sub.endpoint }),
+          }).catch(() => {})
         } catch (e) {
           const code = (e && e.statusCode) || 0
           if (code === 404 || code === 410) dead.push(sub.endpoint) // abonnement weg
         }
       }
-      await rest('push_sent', {
+
+      // Eén regel per alert, met genoeg erbij om hem in het dashboard terug te
+      // herkennen zonder de feed erbij te halen.
+      await rest('push_sent?on_conflict=alert_id', {
         method: 'POST',
-        headers: { Prefer: 'resolution=ignore-duplicates,return=minimal' },
-        body: JSON.stringify({ alert_id: alert.id }),
-      })
+        headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify({
+          alert_id: alert.id,
+          header: alert.header,
+          lines,
+          network_wide: alert.networkWide === true,
+          recipients: ontvangers,
+        }),
+      }).catch(() => {})
     }
-    // 4. Dode abonnementen opruimen.
+
+    // 5. Dode abonnementen opruimen.
     for (const endpoint of new Set(dead)) {
       await rest(`push_subscriptions?endpoint=eq.${encodeURIComponent(endpoint)}`, { method: 'DELETE' })
     }
-    res.status(200).json({ ok: true, alerts: alerts.length, fresh: fresh.length, sent, cleaned: dead.length })
+    res.status(200).json({
+      ok: true,
+      alerts: alerts.length,
+      blocked: geblokkeerd.size,
+      sent,
+      cleaned: dead.length,
+    })
   } catch (e) {
     res.status(200).json({ ok: false, error: e instanceof Error ? e.message : String(e) })
   }
